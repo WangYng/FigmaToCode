@@ -1,13 +1,8 @@
 import React from "react";
 import { HTMLPreview } from "types";
 import {
-  Maximize2,
-  Minimize2,
   MonitorSmartphone,
-  Smartphone,
   Circle,
-  Ruler,
-  Monitor,
 } from "lucide-react";
 import { cn, replaceExternalImagesWithCanvas } from "../lib/utils";
 
@@ -33,26 +28,43 @@ const Preview: React.FC<{
     setBgColor,
   } = props;
 
-  // Define consistent dimensions regardless of mode
-  const containerWidth = expanded ? 320 : 240;
-  const containerHeight = expanded ? 180 : 120;
+  // Use ref to get actual container dimensions
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = React.useState({ width: 240, height: 120 });
 
-  // Calculate scale factor first to use in content width calculation
+  // Observe container size changes
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setContainerSize({ width, height });
+        }
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  // Calculate scale factor based on actual container size
   const scaleFactor = Math.min(
-    containerWidth / htmlPreview.size.width,
-    containerHeight / htmlPreview.size.height,
+    containerSize.width / htmlPreview.size.width,
+    containerSize.height / htmlPreview.size.height,
   );
 
   // Calculate content dimensions based on view mode
   const contentWidth =
     viewMode === "desktop"
-      ? containerWidth
+      ? containerSize.width
       : viewMode === "mobile"
-        ? Math.floor(containerWidth * 0.4) // Narrower for mobile
-        : htmlPreview.size.width * scaleFactor + 2; // I don't know why I need the 2, but it works always. I guess rounding error for zoom.
+        ? Math.floor(containerSize.width * 0.4) // Narrower for mobile
+        : htmlPreview.size.width * scaleFactor + 2;
 
   return (
-    <div className="flex flex-col w-full bg-card rounded-lg border border-border">
+    <div className="flex flex-col w-full h-full bg-card rounded-lg border border-border">
       {/* Header with view mode controls */}
       <div className="flex justify-between items-center px-3 py-2 border-b border-border">
         <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -64,75 +76,23 @@ const Preview: React.FC<{
 
           <button
             onClick={() => setBgColor(bgColor === "white" ? "black" : "white")}
-            className="p-1.5 mr-1 rounded-sm hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-400 transition-colors"
+            className="p-1.5 rounded-sm hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-400 transition-colors"
             aria-label={`Switch the preview to ${bgColor === "white" ? "black" : "white"} background.\nUseful to avoid black text on black background.`}
             title={`Switch the preview to ${bgColor === "white" ? "black" : "white"} background.\nUseful to avoid black text on black background.`}
           >
             <Circle size={14} fill={bgColor} className="stroke-current" />
           </button>
-
-          {/* View Mode Toggle */}
-          {/* <div className="mr-1 flex bg-neutral-100 dark:bg-neutral-700 rounded-md p-0.5">
-            <button
-              onClick={() => setViewMode("desktop")}
-              className={`p-1 rounded text-xs ${
-                viewMode === "desktop"
-                  ? "bg-white dark:bg-neutral-600 shadow-2xs text-neutral-800 dark:text-white"
-                  : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white"
-              } transition-colors duration-200`}
-              aria-label="Desktop view"
-              title="Desktop view"
-            >
-              <Monitor size={14} />
-            </button>
-            <button
-              onClick={() => setViewMode("mobile")}
-              className={`p-1 rounded text-xs ${
-                viewMode === "mobile"
-                  ? "bg-white dark:bg-neutral-600 shadow-2xs text-neutral-800 dark:text-white"
-                  : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white"
-              } transition-colors duration-200`}
-              aria-label="Mobile view"
-              title="Mobile view"
-            >
-              <Smartphone size={14} />
-            </button>
-            <button
-              onClick={() => setViewMode("precision")}
-              className={`p-1 rounded text-xs ${
-                viewMode === "precision"
-                  ? "bg-white dark:bg-neutral-600 shadow-2xs text-neutral-800 dark:text-white"
-                  : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white"
-              } transition-colors duration-200`}
-              aria-label="Precision view (exact dimensions)"
-              title="Precision view (exact dimensions)"
-            >
-              <Ruler size={14} />
-            </button>
-          </div> */}
-
-          {/* Expand/Collapse Button */}
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="p-1 rounded-sm hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-400 transition-colors"
-            aria-label={expanded ? "Minimize preview" : "Maximize preview"}
-            title={expanded ? "Minimize preview" : "Maximize preview"}
-          >
-            {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </button>
         </div>
       </div>
 
       {/* Preview container */}
-      <div className="flex justify-center items-center bg-neutral-50 dark:bg-neutral-900 p-3">
-        {/* Outer container with fixed dimensions */}
+      <div
+        ref={containerRef}
+        className="flex flex-1 justify-center items-center bg-neutral-50 dark:bg-neutral-900 p-3 min-h-[120px]"
+      >
+        {/* Outer container with flexible dimensions */}
         <div
-          className="relative"
-          style={{
-            width: containerWidth,
-            height: containerHeight,
-            transition: "width 0.3s ease, height 0.3s ease",
-          }}
+          className="relative w-full h-full"
         >
           {/* Inner content positioned based on view mode */}
           <div
@@ -141,10 +101,10 @@ const Preview: React.FC<{
               width: contentWidth,
               height:
                 viewMode === "mobile"
-                  ? Math.min(containerHeight * 0.9, containerHeight)
+                  ? Math.min(containerSize.height * 0.9, containerSize.height)
                   : viewMode === "precision"
                     ? htmlPreview.size.height * scaleFactor // Use scaled height for precision
-                    : containerHeight,
+                    : containerSize.height,
               transition: "width 0.3s ease, height 0.3s ease",
             }}
           >

@@ -160,15 +160,23 @@ export const PluginUI = (props: PluginUIProps) => {
         ) : (
           <div className="flex flex-col items-center px-4 py-2 gap-2 dark:bg-transparent">
             {isEmpty === false && props.htmlPreview && (
-              <Preview
-                htmlPreview={props.htmlPreview}
-                expanded={previewExpanded}
-                setExpanded={setPreviewExpanded}
-                viewMode={previewViewMode}
-                setViewMode={setPreviewViewMode}
-                bgColor={previewBgColor}
-                setBgColor={setPreviewBgColor}
-              />
+              <div
+                className="w-full resize-y overflow-hidden"
+                style={{
+                  minHeight: 150,
+                  height: 200,
+                }}
+              >
+                <Preview
+                  htmlPreview={props.htmlPreview}
+                  expanded={previewExpanded}
+                  setExpanded={setPreviewExpanded}
+                  viewMode={previewViewMode}
+                  setViewMode={setPreviewViewMode}
+                  bgColor={previewBgColor}
+                  setBgColor={setPreviewBgColor}
+                />
+              </div>
             )}
 
             {warnings.length > 0 && <WarningsPanel warnings={warnings} />}
