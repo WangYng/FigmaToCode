@@ -308,52 +308,13 @@ const processNodePair = async (
     jsonNode.rotation = -jsonNode.rotation * (180 / Math.PI);
   }
 
-  // Inline all GROUP nodes by processing their children directly
-  if (nodeType === "GROUP" && jsonNode.children) {
-    const processedChildren = [];
-
-    if (
-      Array.isArray(jsonNode.children) &&
-      figmaNode &&
-      "children" in figmaNode
-    ) {
-      // Get visible JSON children (filters out nodes with visible: false)
-      const visibleJsonChildren = jsonNode.children.filter(
-        (child) => child.visible !== false,
-      ) as AltNode[];
-
-      // Map figma children to their IDs for matching
-      const figmaChildrenById = new Map();
-      figmaNode.children.forEach((child) => {
-        figmaChildrenById.set(child.id, child);
-      });
-
-      // Process all visible JSON children that have matching Figma nodes
-      for (const child of visibleJsonChildren) {
-        const figmaChild = figmaChildrenById.get(child.id);
-        if (!figmaChild) continue; // Skip if no matching Figma node found
-
-        const processedChild = await processNodePair(
-          child,
-          figmaChild,
-          settings,
-          parentNode, // The group's parent
-          parentCumulativeRotation + (jsonNode.rotation || 0),
-        );
-
-        // Push the processed group children directly
-        if (processedChild !== null) {
-          if (Array.isArray(processedChild)) {
-            processedChildren.push(...processedChild);
-          } else {
-            processedChildren.push(processedChild);
-          }
-        }
-      }
-    }
-
-    // Simply return the processed children; skip splicing parent's children
-    return processedChildren;
+  // Convert GROUP to FRAME to preserve container structure
+  if (nodeType === "GROUP") {
+    (jsonNode as any).type = "FRAME";
+    // GROUP doesn't have layoutMode, set it explicitly
+    jsonNode.layoutMode = "NONE";
+    // Mark as relative positioning container since GROUP children use absolute positions
+    jsonNode.isRelative = true;
   }
 
   // Return null for unsupported nodes
