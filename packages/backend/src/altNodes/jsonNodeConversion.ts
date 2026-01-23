@@ -13,6 +13,7 @@ export let getStyledTextSegmentsTime = 0;
 export let getStyledTextSegmentsCalls = 0;
 export let processColorVariablesTime = 0;
 export let processColorVariablesCalls = 0;
+export let totalNodesProcessed = 0;
 
 export const resetPerformanceCounters = () => {
   getNodeByIdAsyncTime = 0;
@@ -21,6 +22,8 @@ export const resetPerformanceCounters = () => {
   getStyledTextSegmentsCalls = 0;
   processColorVariablesTime = 0;
   processColorVariablesCalls = 0;
+  totalNodesProcessed = 0;
+  variableCache.clear();
 };
 
 // Keep track of node names for sequential numbering
@@ -272,6 +275,14 @@ const processNodePair = async (
   parentNode?: AltNode,
   parentCumulativeRotation: number = 0,
 ): Promise<Node | Node[] | null> => {
+  totalNodesProcessed++;
+  if (totalNodesProcessed > 500) {
+    addWarning(
+      "Too many nodes selected (over 500). Please select a smaller part of your design to avoid memory issues.",
+    );
+    return null;
+  }
+
   if (!jsonNode.id) return null;
   if (jsonNode.visible === false) return null;
 
@@ -586,6 +597,20 @@ const processNodePair = async (
 };
 
 /**
+ * Helper to count nodes in a selection efficiently without full traversal if limit is reached
+ */
+const getCount = (node: SceneNode, limit: number): number => {
+  let count = 1;
+  if ("children" in node) {
+    for (const child of node.children) {
+      count += getCount(child, limit);
+      if (count > limit) return count;
+    }
+  }
+  return count;
+};
+
+/**
  * Convert Figma nodes to JSON format with parent references added
  * @param nodes The Figma nodes to convert to JSON
  * @param settings Plugin settings
@@ -597,11 +622,30 @@ export const nodesToJSON = async (
 ): Promise<Node[]> => {
   // Reset name counters for each conversion
   nodeNameCounters.clear();
+  variableCache.clear();
+  totalNodesProcessed = 0;
+
+  // Pre-check for total node count to avoid memory issues during exportAsync
+  let totalCount = 0;
+  const limit = 500;
+  for (const node of nodes) {
+    totalCount += getCount(node, limit);
+    if (totalCount > limit) {
+      addWarning(
+        `Too many nodes selected (over ${limit}). Please select a smaller part of your design to avoid memory issues.`,
+      );
+      return [];
+    }
+  }
+
   const exportJsonStart = Date.now();
-  // First get the JSON representation of nodes with rotation handling
-  const nodeResults = await Promise.all(
-    nodes.map(async (node) => {
+  const result: Node[] = [];
+
+  // Process nodes sequentially to minimize memory footprint
+  for (const node of nodes) {
+    try {
       // Export node to JSON
+      const exportStart = Date.now();
       const nodeDoc = (
         (await node.exportAsync({
           format: "JSON_REST_V1",
@@ -621,45 +665,46 @@ export const nodesToJSON = async (
         }
       }
 
-      return {
+      console.log(
+        `[benchmark][inside nodesToJSON] Single node export: ${Date.now() - exportStart}ms`,
+      );
+
+      // Process the pair immediately
+      const processStart = Date.now();
+      const processedNode = await processNodePair(
         nodeDoc,
+        node,
+        settings,
+        undefined,
         nodeCumulativeRotation,
-      };
-    }),
-  );
+      );
 
-  console.log("[debug] initial nodeJson", { ...nodes[0] });
+      console.log(
+        `[benchmark][inside nodesToJSON] Single node process: ${Date.now() - processStart}ms`,
+      );
 
-  console.log(
-    `[benchmark][inside nodesToJSON] JSON_REST_V1 export: ${Date.now() - exportJsonStart}ms`,
-  );
-
-  // Now process each top-level node pair (JSON node + Figma node)
-  const processNodesStart = Date.now();
-  const result: Node[] = [];
-
-  for (let i = 0; i < nodes.length; i++) {
-    const processedNode = await processNodePair(
-      nodeResults[i].nodeDoc,
-      nodes[i],
-      settings,
-      undefined,
-      nodeResults[i].nodeCumulativeRotation,
-    );
-    if (processedNode !== null) {
-      if (Array.isArray(processedNode)) {
-        // If processNodePair returns an array (inlined group), add all nodes
-        result.push(...processedNode);
-      } else {
-        // If it returns a single node, add it directly
-        result.push(processedNode);
+      if (processedNode !== null) {
+        if (Array.isArray(processedNode)) {
+          result.push(...processedNode);
+        } else {
+          result.push(processedNode);
+        }
       }
+
+      // Explicitly try to free memory by clearing reference (JS engine handles this, but good for clarity)
+      // nodeDoc is now out of scope for next iteration
+    } catch (error) {
+      console.error("Error exporting/processing node:", error);
+      addWarning(
+        `Failed to process node "${node.name}". It might be too complex or contain errors.`,
+      );
     }
   }
 
   console.log(
-    `[benchmark][inside nodesToJSON] Process node pairs: ${Date.now() - processNodesStart}ms`,
+    `[benchmark][inside nodesToJSON] Total JSON export & process: ${Date.now() - exportJsonStart}ms`,
   );
 
   return result;
 };
+

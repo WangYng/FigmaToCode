@@ -68,21 +68,48 @@ export const run = async (settings: PluginSettings) => {
   // ignore when nothing was selected
   // If the selection was empty, the converted selection will also be empty.
   if (convertedSelection.length === 0) {
-    postEmptyMessage();
+    if (warnings.size > 0) {
+      postConversionComplete({
+        code: "",
+        htmlPreview: "",
+        colors: [],
+        gradients: [],
+        settings,
+        warnings: [...warnings],
+      });
+    } else {
+      postEmptyMessage();
+    }
     return;
   }
 
   const convertToCodeStart = Date.now();
-  const code = await convertToCode(convertedSelection, settings);
+  let code = await convertToCode(convertedSelection, settings);
   console.log(
     `[benchmark] convertToCode: ${Date.now() - convertToCodeStart}ms`,
   );
 
   const generatePreviewStart = Date.now();
-  const htmlPreview = await generateHTMLPreview(convertedSelection, settings);
+  let htmlPreview = await generateHTMLPreview(convertedSelection, settings);
   console.log(
     `[benchmark] generateHTMLPreview: ${Date.now() - generatePreviewStart}ms`,
   );
+
+  // Check for output size limits to prevent UI crashes
+  const MAX_STRING_LENGTH = 1000000; // 1MB approximate limit for safe messaging
+  if (code.length > MAX_STRING_LENGTH) {
+    addWarning(
+      "Generated code is too large to display fully. It has been truncated.",
+    );
+    code = code.substring(0, MAX_STRING_LENGTH) + "\n...[Truncated]";
+  }
+  if (htmlPreview.length > MAX_STRING_LENGTH) {
+    addWarning(
+      "Generated preview is too large to display fully. It has been truncated.",
+    );
+    htmlPreview =
+      htmlPreview.substring(0, MAX_STRING_LENGTH) + "\n...[Truncated]";
+  }
 
   const colorPanelStart = Date.now();
   const colors = await retrieveGenericSolidUIColors(framework);
