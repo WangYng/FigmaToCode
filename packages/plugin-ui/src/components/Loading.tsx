@@ -40,7 +40,7 @@ const Loading = (_props: LoadingProps) => (
         Converting Design
       </h2>
       <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center max-w-xs">
-        Please wait while your design is being converted to code. This may take a moment for complex designs.
+        Please wait while your design is being converted to HTML. This may take a moment for complex designs.
       </p>
       
       {/* Progress bar */}

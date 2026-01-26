@@ -1,19 +1,9 @@
-import { tailwindCodeGenTextStyles } from "./../../../packages/backend/src/tailwind/tailwindMain";
 import {
   run,
-  flutterMain,
-  tailwindMain,
-  swiftuiMain,
-  htmlMain,
-  composeMain,
   postSettingsChanged,
 } from "backend";
 import { nodesToJSON } from "backend/src/altNodes/jsonNodeConversion";
 import { retrieveGenericSolidUIColors } from "backend/src/common/retrieveUI/retrieveColors";
-import { flutterCodeGenTextStyles } from "backend/src/flutter/flutterMain";
-import { htmlCodeGenTextStyles } from "backend/src/html/htmlMain";
-import { swiftUICodeGenTextStyles } from "backend/src/swiftui/swiftuiMain";
-import { composeCodeGenTextStyles } from "backend/src/compose/composeMain";
 import { PluginSettings, SettingWillChangeMessage } from "types";
 
 let userPluginSettings: PluginSettings;
@@ -79,6 +69,8 @@ const getUserSettings = async () => {
 const initSettings = async () => {
   console.log("[DEBUG] initSettings - Initializing plugin settings");
   await getUserSettings();
+  // HTML-only mode
+  userPluginSettings.framework = "HTML";
   postSettingsChanged(userPluginSettings);
   console.log("[DEBUG] initSettings - Calling safeRun with settings");
   safeRun(userPluginSettings);
@@ -158,6 +150,14 @@ const standardMode = async () => {
     if (msg.type === "pluginSettingWillChange") {
       const { key, value } = msg as SettingWillChangeMessage<unknown>;
       console.log(`[DEBUG] Setting changed: ${key} = ${value}`);
+      if (key === "framework") {
+        // HTML-only mode: ignore framework changes
+        (userPluginSettings as any).framework = "HTML";
+        figma.clientStorage.setAsync("userPluginSettings", userPluginSettings);
+        postSettingsChanged(userPluginSettings);
+        safeRun(userPluginSettings);
+        return;
+      }
       (userPluginSettings as any)[key] = value;
       figma.clientStorage.setAsync("userPluginSettings", userPluginSettings);
       safeRun(userPluginSettings);

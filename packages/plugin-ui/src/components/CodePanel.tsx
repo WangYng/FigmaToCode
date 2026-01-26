@@ -1,5 +1,4 @@
 import {
-  Framework,
   LocalCodegenPreferenceOptions,
   PluginSettings,
   SelectPreferenceOptions,
@@ -11,11 +10,9 @@ import { CopyButton } from "./CopyButton";
 import EmptyState from "./EmptyState";
 import SettingsGroup from "./SettingsGroup";
 import FrameworkTabs from "./FrameworkTabs";
-import { TailwindSettings } from "./TailwindSettings";
 
 interface CodePanelProps {
   code: string;
-  selectedFramework: Framework;
   settings: PluginSettings | null;
   preferenceOptions: LocalCodegenPreferenceOptions[];
   selectPreferenceOptions: SelectPreferenceOptions[];
@@ -33,35 +30,10 @@ const CodePanel = (props: CodePanelProps) => {
     code,
     preferenceOptions,
     selectPreferenceOptions,
-    selectedFramework,
     settings,
     onPreferenceChanged,
   } = props;
   const isCodeEmpty = code === "";
-
-  // Helper function to add the prefix before every class (or className) in the code.
-  // It finds every occurrence of class="..." or className="..." and, for each class,
-  // prepends the custom prefix.
-  const applyPrefixToClasses = (
-    codeString: string,
-    prefix: string | undefined,
-  ) => {
-    if (!prefix) {
-      return codeString;
-    }
-
-    return codeString.replace(
-      /(class(?:Name)?)="([^"]*)"/g,
-      (match, attr, classes) => {
-        const prefixedClasses = classes
-          .split(/\s+/)
-          .filter(Boolean)
-          .map((cls: string) => prefix + cls)
-          .join(" ");
-        return `${attr}="${prefixedClasses}"`;
-      },
-    );
-  };
 
   // Function to truncate code to a specific number of lines
   const truncateCode = (codeString: string, lines: number) => {
@@ -72,24 +44,19 @@ const CodePanel = (props: CodePanelProps) => {
     return codeLines.slice(0, lines).join("\n") + "\n...";
   };
 
-  // If the selected framework is Tailwind and a prefix is provided then transform the code.
-  const prefixedCode =
-    selectedFramework === "Tailwind" &&
-    settings?.customTailwindPrefix?.trim() !== ""
-      ? applyPrefixToClasses(code, settings?.customTailwindPrefix)
-      : code;
+  const displayedSourceCode = code;
 
   // Memoize the line count calculation to improve performance for large code blocks
   const lineCount = useMemo(
-    () => prefixedCode.split("\n").length,
-    [prefixedCode],
+    () => displayedSourceCode.split("\n").length,
+    [displayedSourceCode],
   );
 
   // Determine if code should be truncated
   const shouldTruncate = !isExpanded && lineCount > initialLinesToShow;
   const displayedCode = shouldTruncate
-    ? truncateCode(prefixedCode, initialLinesToShow)
-    : prefixedCode;
+    ? truncateCode(displayedSourceCode, initialLinesToShow)
+    : displayedSourceCode;
   const showMoreButton = lineCount > initialLinesToShow;
 
   const handleButtonHover = () => setSyntaxHovered(true);
@@ -101,17 +68,15 @@ const CodePanel = (props: CodePanelProps) => {
     stylingPreferences,
     selectableSettingsFiltered,
   } = useMemo(() => {
-    // Get preferences for the current framework
-    const frameworkPreferences = preferenceOptions.filter((preference) =>
-      preference.includedLanguages?.includes(selectedFramework),
-    );
+    // HTML-only mode: show only preferences that apply to HTML (or global ones).
+    const frameworkPreferences = preferenceOptions.filter((preference) => {
+      const langs = preference.includedLanguages;
+      return !langs || langs.includes("HTML");
+    });
 
     // Define preference grouping based on property names
     const essentialPropertyNames = ["jsx"];
     const stylingPropertyNames = [
-      "useTailwind4",
-      "roundTailwindValues",
-      "roundTailwindColors",
       "useColorVariables",
       "showLayerNames",
       "embedImages",
@@ -127,10 +92,10 @@ const CodePanel = (props: CodePanelProps) => {
         stylingPropertyNames.includes(p.propertyName),
       ),
       selectableSettingsFiltered: selectPreferenceOptions.filter((p) =>
-        p.includedLanguages?.includes(selectedFramework),
+        !p.includedLanguages || p.includedLanguages.includes("HTML"),
       ),
     };
-  }, [preferenceOptions, selectPreferenceOptions, selectedFramework]);
+  }, [preferenceOptions, selectPreferenceOptions]);
 
   return (
     <div className="w-full flex flex-col gap-2 mt-2">
@@ -140,7 +105,7 @@ const CodePanel = (props: CodePanelProps) => {
         </p>
         {!isCodeEmpty && (
           <CopyButton
-            value={prefixedCode}
+            value={displayedSourceCode}
             onMouseEnter={handleButtonHover}
             onMouseLeave={handleButtonLeave}
           />
@@ -162,7 +127,7 @@ const CodePanel = (props: CodePanelProps) => {
           {selectableSettingsFiltered.length > 0 && (
             <div className="mt-1 mb-2 last:mb-0">
               <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                {selectedFramework} Options
+                HTML Options
               </p>
               {selectableSettingsFiltered.map((preference) => {
                 // Regular toggle buttons for other options
@@ -197,23 +162,15 @@ const CodePanel = (props: CodePanelProps) => {
             </div>
           )}
 
-          {/* Styling preferences with custom prefix for Tailwind */}
-          {(stylingPreferences.length > 0 ||
-            selectedFramework === "Tailwind") && (
+          {/* Styling preferences */}
+          {stylingPreferences.length > 0 && (
             <SettingsGroup
               title="Styling Options"
               settings={stylingPreferences}
               alwaysExpanded={true}
               selectedSettings={settings}
               onPreferenceChanged={onPreferenceChanged}
-            >
-              {selectedFramework === "Tailwind" && (
-                <TailwindSettings
-                  settings={settings}
-                  onPreferenceChanged={onPreferenceChanged}
-                />
-              )}
-            </SettingsGroup>
+            />
           )}
         </div>
       )}
@@ -229,16 +186,9 @@ const CodePanel = (props: CodePanelProps) => {
           <>
             <SyntaxHighlighter
               language={
-                selectedFramework === "HTML" &&
                 settings?.htmlGenerationMode === "styled-components"
                   ? "jsx"
-                  : selectedFramework === "Flutter"
-                    ? "dart"
-                    : selectedFramework === "SwiftUI"
-                      ? "swift"
-                      : selectedFramework === "Compose"
-                        ? "kotlin"
-                        : "html"
+                  : "html"
               }
               style={theme}
               customStyle={{

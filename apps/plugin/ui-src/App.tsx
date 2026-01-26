@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { PluginUI } from "plugin-ui";
 import {
-  Framework,
   PluginSettings,
   ConversionMessage,
   Message,
@@ -17,7 +16,6 @@ import copy from "copy-to-clipboard";
 
 interface AppState {
   code: string;
-  selectedFramework: Framework;
   isLoading: boolean;
   hasSelection: boolean;
   htmlPreview: HTMLPreview;
@@ -58,7 +56,6 @@ function downloadJson(data: unknown, filename: string) {
 export default function App() {
   const [state, setState] = useState<AppState>({
     code: "",
-    selectedFramework: "HTML",
     isLoading: false,
     hasSelection: false,
     htmlPreview: emptyPreview,
@@ -93,7 +90,6 @@ export default function App() {
           setState((prevState) => ({
             ...prevState,
             ...conversionMessage,
-            selectedFramework: conversionMessage.settings.framework,
             isLoading: false,
             hasSelection: true,
           }));
@@ -104,7 +100,6 @@ export default function App() {
           setState((prevState) => ({
             ...prevState,
             settings: settingsMessage.settings,
-            selectedFramework: settingsMessage.settings.framework,
           }));
           break;
 
@@ -182,18 +177,6 @@ export default function App() {
     };
   }, []);
 
-  const handleFrameworkChange = (updatedFramework: Framework) => {
-    if (updatedFramework !== state.selectedFramework) {
-      setState((prevState) => ({
-        ...prevState,
-        // code: "// Loading...",
-        selectedFramework: updatedFramework,
-      }));
-      postUISettingsChangingMessage("framework", updatedFramework, {
-        targetOrigin: "*",
-      });
-    }
-  };
   const handlePreferencesChange = (
     key: keyof PluginSettings,
     value: boolean | string | number,
@@ -213,8 +196,6 @@ export default function App() {
         isLoading={state.isLoading}
         code={state.code}
         warnings={state.warnings}
-        selectedFramework={state.selectedFramework}
-        setSelectedFramework={handleFrameworkChange}
         onPreferenceChanged={handlePreferencesChange}
         htmlPreview={state.htmlPreview}
         settings={state.settings}

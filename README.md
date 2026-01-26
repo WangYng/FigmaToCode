@@ -13,7 +13,7 @@
 <a href="https://www.figma.com/community/plugin/842128343887142055"><img src="assets/badge.png" height="60"/></a>
 </p>
 
-Converting Figma designs into usable code can be a challenge, often requiring time-consuming manual work. Figma to Code simplifies that process. This plugin generates responsive layouts in `HTML`, `React (JSX)`, `Svelte`, `styled-components`, `Tailwind`, `Flutter`, and `SwiftUI` directly from your designs. Your feedback and ideas are always welcome.
+Converting Figma designs into usable code can be a challenge, often requiring time-consuming manual work. Figma to Code simplifies that process. This plugin generates responsive layouts in **HTML** (including `React (JSX)`, `Svelte`, and `styled-components` modes) directly from your designs. Your feedback and ideas are always welcome.
 
 ![Gif showing the conversion](assets/lossy_gif.gif)
 
@@ -49,8 +49,8 @@ Converting visual designs to code inevitably encounters complex edge cases. Here
 
 ### Todo
 
-- Vectors (possible to enable in HTML and Tailwind)
-- Images (possible to enable to inline them in HTML and Tailwind)
+- Vectors (possible to enable in HTML)
+- Images (possible to enable to inline them in HTML)
 - Line/Star/Polygon
 
 ## How to build the project
