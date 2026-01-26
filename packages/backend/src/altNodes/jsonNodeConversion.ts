@@ -50,6 +50,80 @@ const isPureVectorAsset = (node: any): boolean => {
   return visibleChildren.every(isPureVectorAsset);
 };
 
+/**
+ * Best-effort normalization for Figma mask groups in the JSON pipeline.
+ *
+ * Figma "Use as mask" is expressed as `isMask: true` on a child layer (often the first child),
+ * not as `clipsContent: true` on the parent. Most codegen targets in this repo only implement
+ * clipping via `clipsContent` + corner radius on the container.
+ *
+ * For the common pattern:
+ * - parent is a FRAME/GROUP-like container
+ * - first child is a RECTANGLE/ELLIPSE with `isMask: true`
+ * - mask matches the parent bounds (x/y ~ 0, width/height ~ parent)
+ *
+ * We convert to:
+ * - parent.clipsContent = true
+ * - parent inherits mask corner radii (so rounded clipping works)
+ * - remove the mask child from children (mask layer is not rendered in Figma)
+ */
+const normalizeMaskGroupToClipping = (node: any) => {
+  if (!node || !Array.isArray(node.children) || node.children.length < 2) return;
+
+  const parentWidth = typeof node.width === "number" ? node.width : undefined;
+  const parentHeight = typeof node.height === "number" ? node.height : undefined;
+  if (!parentWidth || !parentHeight) return;
+
+  // Only handle the most common ordering: mask is the first child.
+  const mask = node.children[0];
+  if (!mask || mask.visible === false) return;
+  if (mask.isMask !== true) return;
+  if (mask.maskType && mask.maskType !== "ALPHA" && mask.maskType !== "LUMINANCE")
+    return;
+
+  // Restrict to masks we can safely approximate with rounded-rect clipping.
+  // (ELLIPSE/vector masks need real mask/clip-path support in the generators.)
+  if (mask.type !== "RECTANGLE") return;
+
+  const eps = 0.5;
+  const maskX = typeof mask.x === "number" ? mask.x : undefined;
+  const maskY = typeof mask.y === "number" ? mask.y : undefined;
+  const maskW = typeof mask.width === "number" ? mask.width : undefined;
+  const maskH = typeof mask.height === "number" ? mask.height : undefined;
+  if (
+    maskX === undefined ||
+    maskY === undefined ||
+    maskW === undefined ||
+    maskH === undefined
+  )
+    return;
+
+  const matchesBounds =
+    Math.abs(maskX) <= eps &&
+    Math.abs(maskY) <= eps &&
+    Math.abs(maskW - parentWidth) <= eps &&
+    Math.abs(maskH - parentHeight) <= eps;
+  if (!matchesBounds) return;
+
+  // Turn on container clipping (this is what our generators understand).
+  node.clipsContent = true;
+
+  // Hoist corner radii to the container so the clip is rounded.
+  const parentRadii = Array.isArray(node.rectangleCornerRadii)
+    ? node.rectangleCornerRadii
+    : undefined;
+  const parentIsZeroRadii =
+    !parentRadii ||
+    parentRadii.length !== 4 ||
+    parentRadii.every((r: any) => typeof r === "number" && r === 0);
+  if (parentIsZeroRadii && Array.isArray(mask.rectangleCornerRadii)) {
+    node.rectangleCornerRadii = mask.rectangleCornerRadii;
+  }
+
+  // Remove mask layer (Figma mask layer is not drawn as a visible shape).
+  node.children = node.children.slice(1);
+};
+
 // Performance tracking counters
 export let getNodeByIdAsyncTime = 0;
 export let getNodeByIdAsyncCalls = 0;
@@ -640,6 +714,9 @@ const processNodePair = async (
 
     // Replace children array with processed children
     jsonNode.children = processedChildren;
+
+    // Normalize common mask-group pattern to container clipping so generated code actually clips.
+    normalizeMaskGroupToClipping(jsonNode);
 
     if (
       jsonNode.layoutMode === "NONE" ||

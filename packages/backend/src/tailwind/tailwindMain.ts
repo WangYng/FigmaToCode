@@ -47,9 +47,8 @@ const tailwindWidgetGenerator = async (
 const convertNode =
   (settings: TailwindSettings) =>
   async (node: SceneNode): Promise<string> => {
-    // Allow embedding SVG whenever `canBeFlattened` is true (e.g. node explicitly has SVG export settings),
-    // even if the global embedVectors setting is off.
-    if ((node as any).canBeFlattened) {
+    // Embed SVGs only when the user explicitly enables it.
+    if (settings.embedVectors && (node as any).canBeFlattened) {
       const altNode = await renderAndAttachSVG(node);
       if (altNode.svg) {
         return tailwindWrapSVG(altNode, settings);
@@ -274,8 +273,6 @@ export const tailwindContainer = (
     return children;
   }
 
-  const build = builder.build(additionalAttr);
-
   // Determine if we should use img tag
   let tag = "div";
   let src = "";
@@ -288,10 +285,15 @@ export const tailwindContainer = (
     if (!("children" in node) || node.children.length === 0) {
       tag = "img";
       src = ` src="${imageURL}"`;
+      // Tailwind preflight usually applies: img { max-width: 100%; height: auto; }
+      // Disable those constraints for absolutely positioned image layers.
+      builder.addAttributes("max-w-none", "max-h-none", "block");
     } else {
       builder.addAttributes(`bg-[url(${imageURL})]`);
     }
   }
+
+  const build = builder.build(additionalAttr);
 
   // Generate appropriate HTML
   if (children) {

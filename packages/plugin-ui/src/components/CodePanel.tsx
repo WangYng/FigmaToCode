@@ -203,6 +203,7 @@ const CodePanel = (props: CodePanelProps) => {
             <SettingsGroup
               title="Styling Options"
               settings={stylingPreferences}
+              alwaysExpanded={true}
               selectedSettings={settings}
               onPreferenceChanged={onPreferenceChanged}
             >

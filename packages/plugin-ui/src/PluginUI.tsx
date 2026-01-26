@@ -164,8 +164,8 @@ export const PluginUI = (props: PluginUIProps) => {
               <div
                 className="w-full resize-y overflow-hidden"
                 style={{
-                  minHeight: 150,
-                  height: 200,
+                  minHeight: 300,
+                  height: 400,
                 }}
               >
                 <Preview

@@ -88,7 +88,7 @@ const Preview: React.FC<{
       {/* Preview container */}
       <div
         ref={containerRef}
-        className="flex flex-1 justify-center items-center bg-neutral-50 dark:bg-neutral-900 p-3 min-h-[120px]"
+        className="flex flex-1 justify-center items-center bg-neutral-50 dark:bg-neutral-900 p-3 min-h-[240px]"
       >
         {/* Outer container with flexible dimensions */}
         <div

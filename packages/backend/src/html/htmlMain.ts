@@ -386,10 +386,8 @@ const htmlWidgetGenerator = async (
 };
 
 const convertNode = (settings: HTMLSettings) => async (node: SceneNode) => {
-  // Note: In the JSON-based pipeline, nodes may not be real SceneNodes. We still
-  // support embedding SVG when `canBeFlattened` is set (e.g. explicit SVG exportSettings),
-  // to avoid degrading vectors into outlined rectangles.
-  if ((node as any).canBeFlattened) {
+  // Embed SVGs only when the user explicitly enables it.
+  if (settings.embedVectors && (node as any).canBeFlattened) {
     const altNode = await renderAndAttachSVG(node);
     if (altNode.svg) {
       return htmlWrapSVG(altNode, settings);
@@ -625,6 +623,16 @@ const htmlContainer = async (
       } else {
         tag = "img";
         src = ` src="${imgUrl}"`;
+        // Many preview environments apply global resets like:
+        //   img { max-width: 100%; height: auto; }
+        // That can override the intended absolute pixel sizing and create gaps.
+        // Force-disable those constraints for exported image layers.
+        const isJsx = settings.htmlGenerationMode === "jsx";
+        builder.addStyles(
+          formatWithJSX("max-width", isJsx, "none"),
+          formatWithJSX("max-height", isJsx, "none"),
+          formatWithJSX("display", isJsx, "block"),
+        );
       }
     }
 
