@@ -150,7 +150,11 @@ function checkChildrenRecursively(children: ReadonlyArray<SceneNode>): {
  * @param logDetails Set to true to print debug information to the console.
  * @returns True if the node is likely an icon, false otherwise.
  */
-export function isLikelyIcon(node: SceneNode, logDetails = false): boolean {
+export function isLikelyIcon(
+  node: SceneNode,
+  logDetails = false,
+  maxSize = 64,
+): boolean {
   const info: string[] = [`Node: ${node.name} (${node.type}, ID: ${node.id})`];
   let result = false;
   let reason = "";
@@ -186,7 +190,7 @@ export function isLikelyIcon(node: SceneNode, logDetails = false): boolean {
     }
     // Check other primitives (ELLIPSE, RECTANGLE, LINE) with size constraint
     else if (ICON_PRIMITIVE_TYPES.has(node.type)) {
-      if (isTypicalIconSize(node)) {
+      if (isTypicalIconSize(node, maxSize)) {
         reason = `Direct ${node.type} with typical size`;
         result = true;
       } else {
@@ -197,7 +201,7 @@ export function isLikelyIcon(node: SceneNode, logDetails = false): boolean {
     // --- 5. Container Logic ---
     else if (ICON_CONTAINER_TYPES.has(node.type) && "children" in node) {
       // Container size check still uses the simplified isTypicalIconSize
-      if (!isTypicalIconSize(node)) {
+      if (!isTypicalIconSize(node, maxSize)) {
         reason = `Container but too large (${Math.round(node.width)}x${Math.round(node.height)})`;
         result = false;
       } else {

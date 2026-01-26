@@ -502,7 +502,13 @@ const processNodePair = async (
     // If embedVectors is enabled, we use the full icon heuristic.
     // If embedVectors is disabled, we ONLY flatten nodes that explicitly opted into SVG export.
     const canFlatten =
-      settings.embedVectors ? isLikelyIcon(jsonNode as any) : svgExportExplicitlyEnabled;
+      settings.embedVectors
+        ? isLikelyIcon(
+            jsonNode as any,
+            false,
+            settings.embedVectorsMaxSize ?? 64,
+          )
+        : svgExportExplicitlyEnabled;
     (jsonNode as any).canBeFlattened = canFlatten;
 
     // If this node will be flattened to SVG, collect its color variables
@@ -515,9 +521,10 @@ const processNodePair = async (
     // to embed as a single SVG (common for icon packs), even if the designer didn't
     // manually set export settings. This avoids degrading icons into outlined rectangles.
     if (!settings.embedVectors && !parentNode?.canBeFlattened) {
+      const maxSize = settings.embedVectorsMaxSize ?? 64;
       const canFlatten =
         svgExportExplicitlyEnabled ||
-        (isWithinMaxSize(jsonNode, 64) && isPureVectorAsset(jsonNode));
+        (isWithinMaxSize(jsonNode, maxSize) && isPureVectorAsset(jsonNode));
       (jsonNode as any).canBeFlattened = canFlatten;
       if (canFlatten && settings.useColorVariables) {
         (jsonNode as any)._collectColorMappings = true;

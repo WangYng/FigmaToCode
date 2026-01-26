@@ -32,6 +32,7 @@ export const defaultPluginSettings: PluginSettings = {
   customTailwindPrefix: "",
   embedImages: false,
   embedVectors: false,
+  embedVectorsMaxSize: 64,
   htmlGenerationMode: "html",
   tailwindGenerationMode: "jsx",
   baseFontSize: 16,

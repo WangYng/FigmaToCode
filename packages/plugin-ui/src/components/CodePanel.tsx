@@ -167,18 +167,31 @@ const CodePanel = (props: CodePanelProps) => {
               {selectableSettingsFiltered.map((preference) => {
                 // Regular toggle buttons for other options
                 return (
-                  <FrameworkTabs
-                    options={preference.options}
-                    selectedValue={
-                      (settings?.[preference.propertyName] ??
-                        preference.options.find((option) => option.isDefault)
-                          ?.value ??
-                        "") as string
-                    }
-                    onChange={(value) => {
-                      onPreferenceChanged(preference.propertyName, value);
-                    }}
-                  />
+                  <div key={preference.propertyName} className="mt-2">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      {preference.label}
+                    </p>
+                    <FrameworkTabs
+                      options={preference.options}
+                      selectedValue={String(
+                        settings?.[preference.propertyName] ??
+                          preference.options.find((option) => option.isDefault)
+                            ?.value ??
+                          "",
+                      )}
+                      onChange={(value) => {
+                        if (preference.propertyName === "embedVectorsMaxSize") {
+                          const parsed = Number.parseInt(value, 10);
+                          onPreferenceChanged(
+                            preference.propertyName,
+                            Number.isFinite(parsed) ? parsed : 64,
+                          );
+                          return;
+                        }
+                        onPreferenceChanged(preference.propertyName, value);
+                      }}
+                    />
+                  </div>
                 );
               })}
             </div>

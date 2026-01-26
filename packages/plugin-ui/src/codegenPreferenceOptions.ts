@@ -78,6 +78,18 @@ export const selectPreferenceOptions: SelectPreferenceOptions[] = [
   },
   {
     itemType: "select",
+    propertyName: "embedVectorsMaxSize",
+    label: "SVG Max Size",
+    options: [
+      { label: "64", value: "64", isDefault: true },
+      { label: "128", value: "128" },
+      { label: "256", value: "256" },
+      { label: "512", value: "512" },
+    ],
+    includedLanguages: ["HTML", "Tailwind"],
+  },
+  {
+    itemType: "select",
     propertyName: "tailwindGenerationMode",
     label: "Mode",
     options: [

@@ -5,6 +5,7 @@ export interface HTMLSettings {
   showLayerNames: boolean;
   embedImages: boolean;
   embedVectors: boolean;
+  embedVectorsMaxSize: number;
   useColorVariables: boolean;
   htmlGenerationMode: "html" | "jsx" | "styled-components" | "svelte";
 }
