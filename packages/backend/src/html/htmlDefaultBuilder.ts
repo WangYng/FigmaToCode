@@ -271,13 +271,71 @@ export class HtmlDefaultBuilder {
         formatWithJSX("top", isJSX, y),
         formatWithJSX("position", isJSX, "absolute"),
       );
+      
+      // Set z-index for absolute positioned elements based on their order
+      // Background layers (earlier in list) should have lower z-index
+      const parent = node.parent;
+      if (parent && "children" in parent && parent.children.length > 0) {
+        const visibleChildren = parent.children.filter((child) => child.visible !== false);
+        // Find the index of this node in the visible children array
+        let nodeIndex = -1;
+        for (let i = 0; i < visibleChildren.length; i++) {
+          if (visibleChildren[i].id === node.id) {
+            nodeIndex = i;
+            break;
+          }
+        }
+        // Set z-index based on position: earlier elements (background) get lower z-index
+        // First element gets z-index: 0, subsequent elements get incrementing z-index
+        if (nodeIndex >= 0) {
+          const zIndexValue = nodeIndex.toString();
+          this.addStyles(formatWithJSX("z-index", isJSX, zIndexValue));
+        }
+      }
     } else {
-      if (node.type === "GROUP" || (node as any).isRelative) {
+      // Check if parent has absolute positioned children
+      const parent = node.parent;
+      const parentHasAbsoluteChildren = parent && "children" in parent && this.hasAbsolutePositionedChildren(parent as SceneNode);
+      
+      // Check if this node should be relative positioned
+      const shouldBeRelative =
+        node.type === "GROUP" ||
+        (node as any).isRelative ||
+        this.hasAbsolutePositionedChildren(node) ||
+        parentHasAbsoluteChildren;
+
+      if (shouldBeRelative) {
         this.addStyles(formatWithJSX("position", isJSX, "relative"));
+        
+        // If parent has absolute positioned children, MUST set z-index to participate in stacking context
+        // This ensures non-absolute children (content layers) appear above absolute children (background layers)
+        // Both position: relative and z-index: 1 are required together
+        if (parentHasAbsoluteChildren) {
+          this.addStyles(formatWithJSX("z-index", isJSX, "1"));
+        }
       }
     }
 
     return this;
+  }
+
+  // Helper method to check if a node has absolute positioned children
+  private hasAbsolutePositionedChildren(node: SceneNode): boolean {
+    if (!("children" in node) || !node.children) {
+      return false;
+    }
+
+    return node.children.some((child) => {
+      // Check if child has explicit absolute positioning
+      if ("layoutPositioning" in child && child.layoutPositioning === "ABSOLUTE") {
+        return true;
+      }
+      // Check if child would be absolutely positioned based on parent layout
+      if (commonIsAbsolutePosition(child)) {
+        return true;
+      }
+      return false;
+    });
   }
 
   applyFillsToStyle(

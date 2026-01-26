@@ -386,6 +386,11 @@ const htmlWidgetGenerator = async (
 };
 
 const convertNode = (settings: HTMLSettings) => async (node: SceneNode) => {
+  // Skip mask nodes - they are not rendered as visual elements, only used to clip siblings
+  if ((node as any).isMask === true) {
+    return "";
+  }
+
   // Embed SVGs only when the user explicitly enables it.
   if (settings.embedVectors && (node as any).canBeFlattened) {
     const altNode = await renderAndAttachSVG(node);
