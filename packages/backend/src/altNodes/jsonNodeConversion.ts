@@ -6,6 +6,50 @@ import { calculateRectangleFromBoundingBox } from "../common/commonPosition";
 import { isLikelyIcon } from "./iconDetection";
 import { AltNode } from "../alt_api_types";
 
+const hasSvgExportSettings = (node: any): boolean => {
+  const settingsToCheck: ReadonlyArray<any> = node?.exportSettings || [];
+  return settingsToCheck.some((setting) => setting?.format === "SVG");
+};
+
+const isWithinMaxSize = (node: any, maxSize = 64): boolean => {
+  const w = typeof node?.width === "number" ? node.width : undefined;
+  const h = typeof node?.height === "number" ? node.height : undefined;
+  if (!w || !h) return false;
+  return w > 0 && h > 0 && w <= maxSize && h <= maxSize;
+};
+
+// Conservative "this is basically an SVG asset" check for the JSON pipeline.
+// We use this ONLY when embedVectors is disabled, to still embed small icon-like vector groups
+// without flattening arbitrary layout frames.
+const isPureVectorAsset = (node: any): boolean => {
+  if (!node || node.visible === false) return false;
+
+  // Allowed leaf primitives that export cleanly to SVG.
+  // Allowed containers that may wrap vector leaves.
+  const isAllowedLeaf =
+    node.type === "VECTOR" ||
+    node.type === "BOOLEAN_OPERATION" ||
+    node.type === "RECTANGLE" ||
+    node.type === "ELLIPSE" ||
+    node.type === "STAR" ||
+    node.type === "POLYGON" ||
+    node.type === "LINE";
+  if (isAllowedLeaf) return true;
+
+  const isAllowedContainer =
+    node.type === "GROUP" ||
+    node.type === "FRAME" ||
+    node.type === "COMPONENT" ||
+    node.type === "INSTANCE";
+  if (!isAllowedContainer) return false;
+
+  const children: any[] = Array.isArray(node.children) ? node.children : [];
+  const visibleChildren = children.filter((c) => c?.visible !== false);
+  if (visibleChildren.length === 0) return false;
+
+  return visibleChildren.every(isPureVectorAsset);
+};
+
 // Performance tracking counters
 export let getNodeByIdAsyncTime = 0;
 export let getNodeByIdAsyncCalls = 0;
@@ -453,17 +497,34 @@ const processNodePair = async (
   }
 
   // Add canBeFlattened property
-  if (settings.embedVectors && !parentNode?.canBeFlattened) {
-    const isIcon = isLikelyIcon(jsonNode as any);
-    (jsonNode as any).canBeFlattened = isIcon;
+  const svgExportExplicitlyEnabled = hasSvgExportSettings(jsonNode);
+  if ((settings.embedVectors || svgExportExplicitlyEnabled) && !parentNode?.canBeFlattened) {
+    // If embedVectors is enabled, we use the full icon heuristic.
+    // If embedVectors is disabled, we ONLY flatten nodes that explicitly opted into SVG export.
+    const canFlatten =
+      settings.embedVectors ? isLikelyIcon(jsonNode as any) : svgExportExplicitlyEnabled;
+    (jsonNode as any).canBeFlattened = canFlatten;
 
     // If this node will be flattened to SVG, collect its color variables
-    if (isIcon && settings.useColorVariables) {
+    if (canFlatten && settings.useColorVariables) {
       // Schedule color mapping collection after variable processing
       (jsonNode as any)._collectColorMappings = true;
     }
   } else {
-    (jsonNode as any).canBeFlattened = false;
+    // When embedVectors is disabled, we still want small, pure-vector icon groups
+    // to embed as a single SVG (common for icon packs), even if the designer didn't
+    // manually set export settings. This avoids degrading icons into outlined rectangles.
+    if (!settings.embedVectors && !parentNode?.canBeFlattened) {
+      const canFlatten =
+        svgExportExplicitlyEnabled ||
+        (isWithinMaxSize(jsonNode, 64) && isPureVectorAsset(jsonNode));
+      (jsonNode as any).canBeFlattened = canFlatten;
+      if (canFlatten && settings.useColorVariables) {
+        (jsonNode as any)._collectColorMappings = true;
+      }
+    } else {
+      (jsonNode as any).canBeFlattened = false;
+    }
   }
 
   if (

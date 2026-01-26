@@ -386,7 +386,10 @@ const htmlWidgetGenerator = async (
 };
 
 const convertNode = (settings: HTMLSettings) => async (node: SceneNode) => {
-  if (settings.embedVectors && (node as any).canBeFlattened) {
+  // Note: In the JSON-based pipeline, nodes may not be real SceneNodes. We still
+  // support embedding SVG when `canBeFlattened` is set (e.g. explicit SVG exportSettings),
+  // to avoid degrading vectors into outlined rectangles.
+  if ((node as any).canBeFlattened) {
     const altNode = await renderAndAttachSVG(node);
     if (altNode.svg) {
       return htmlWrapSVG(altNode, settings);

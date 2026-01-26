@@ -4,12 +4,15 @@ export const getCommonPositionValue = (
   node: SceneNode,
   settings?: HTMLSettings | TailwindSettings,
 ): { x: number; y: number } => {
-  if (node.parent && node.parent.absoluteBoundingBox) {
-    if (settings?.embedVectors && node.svg) {
+  const anyNode = node as any;
+  const parent: any = anyNode.parent;
+
+  if (parent?.absoluteBoundingBox) {
+    if (anyNode.svg && anyNode.absoluteBoundingBox) {
       // When embedding vectors, we need to use the absolute position, since it already includes the rotation.
       return {
-        x: node.absoluteBoundingBox.x - node.parent.absoluteBoundingBox.x,
-        y: node.absoluteBoundingBox.y - node.parent.absoluteBoundingBox.y,
+        x: anyNode.absoluteBoundingBox.x - parent.absoluteBoundingBox.x,
+        y: anyNode.absoluteBoundingBox.y - parent.absoluteBoundingBox.y,
       };
     }
 

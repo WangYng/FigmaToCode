@@ -47,7 +47,9 @@ const tailwindWidgetGenerator = async (
 const convertNode =
   (settings: TailwindSettings) =>
   async (node: SceneNode): Promise<string> => {
-    if (settings.embedVectors && (node as any).canBeFlattened) {
+    // Allow embedding SVG whenever `canBeFlattened` is true (e.g. node explicitly has SVG export settings),
+    // even if the global embedVectors setting is off.
+    if ((node as any).canBeFlattened) {
       const altNode = await renderAndAttachSVG(node);
       if (altNode.svg) {
         return tailwindWrapSVG(altNode, settings);
