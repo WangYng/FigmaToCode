@@ -148,14 +148,9 @@ const standardMode = async () => {
 
   // Listen for page changes
   figma.loadAllPagesAsync();
-  figma.on("documentchange", () => {
-    console.log("[DEBUG] documentchange event triggered");
-    // Node: This was causing an infinite load when you try to export a background image from a group that contains children.
-    // The reason for this is that the code will temporarily hide the children of the group in order to export a clean image
-    // then restores the visibility of the children. This constitutes a document change so it's restarting the whole conversion.
-    // In order to stop this, we disable safeRun() when doing conversions (while isLoading === true).
-    safeRun(userPluginSettings);
-  });
+  // NOTE: Intentionally do NOT re-run conversion on `documentchange`.
+  // This event is very noisy (it can fire during conversion and for unrelated edits),
+  // which leads to frequent "Converting Design" loading flashes.
 
   figma.ui.onmessage = async (msg) => {
     console.log("[DEBUG] figma.ui.onmessage", msg);
