@@ -106,6 +106,10 @@ const CodePanel = (props: CodePanelProps) => {
         {!isCodeEmpty && (
           <CopyButton
             value={displayedSourceCode}
+            // HTML-only mode: allow downloading as .html when code is too large to copy.
+            downloadFilename="figma-to-code.html"
+            // Keep this aligned with backend MAX_STRING_LENGTH (~3MB).
+            downloadThresholdBytes={3 * 1024 * 1024}
             onMouseEnter={handleButtonHover}
             onMouseLeave={handleButtonLeave}
           />

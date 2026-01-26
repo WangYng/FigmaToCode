@@ -7,7 +7,16 @@ import {
   clearWarnings,
   warnings,
 } from "./common/commonConversionWarnings";
-import { postConversionComplete, postEmptyMessage } from "./messaging";
+import {
+  postCodeChunk,
+  postCodeChunkEnd,
+  postCodeChunkStart,
+  postConversionComplete,
+  postEmptyMessage,
+  postPreviewChunk,
+  postPreviewChunkEnd,
+  postPreviewChunkStart,
+} from "./messaging";
 import { PluginSettings } from "types";
 import { convertToCode } from "./common/retrieveUI/convertToCode";
 import { generateHTMLPreview } from "./html/htmlMain";
@@ -71,7 +80,7 @@ export const run = async (settings: PluginSettings) => {
     if (warnings.size > 0) {
       postConversionComplete({
         code: "",
-        htmlPreview: "",
+        htmlPreview: { size: { width: 0, height: 0 }, content: "" },
         colors: [],
         gradients: [],
         settings,
@@ -84,32 +93,24 @@ export const run = async (settings: PluginSettings) => {
   }
 
   const convertToCodeStart = Date.now();
-  let code = await convertToCode(convertedSelection, settings);
+  // Keep the generated code consistent with what the preview renders:
+  // always generate plain HTML (no JSX/Svelte/styled-components) in this HTML-only fork.
+  const htmlOnlySettings = { ...settings, htmlGenerationMode: "html" as const };
+  let code = await convertToCode(convertedSelection, htmlOnlySettings);
   console.log(
     `[benchmark] convertToCode: ${Date.now() - convertToCodeStart}ms`,
   );
 
   const generatePreviewStart = Date.now();
-  let htmlPreview = await generateHTMLPreview(convertedSelection, settings);
+  let htmlPreview = await generateHTMLPreview(convertedSelection, htmlOnlySettings);
   console.log(
     `[benchmark] generateHTMLPreview: ${Date.now() - generatePreviewStart}ms`,
   );
 
-  // Check for output size limits to prevent UI crashes
-  const MAX_STRING_LENGTH = 1000000; // 1MB approximate limit for safe messaging
-  if (code.length > MAX_STRING_LENGTH) {
-    addWarning(
-      "Generated code is too large to display fully. It has been truncated.",
-    );
-    code = code.substring(0, MAX_STRING_LENGTH) + "\n...[Truncated]";
-  }
-  if (htmlPreview.length > MAX_STRING_LENGTH) {
-    addWarning(
-      "Generated preview is too large to display fully. It has been truncated.",
-    );
-    htmlPreview =
-      htmlPreview.substring(0, MAX_STRING_LENGTH) + "\n...[Truncated]";
-  }
+  // Check for output size limits to prevent UI crashes.
+  // NOTE: We do NOT truncate `code` or `htmlPreview.content` anymore; we send them in chunks if needed.
+  const MAX_STRING_LENGTH = 3000000; // ~3MB safe limit for a single postMessage payload
+  const previewChunked = htmlPreview.content.length > MAX_STRING_LENGTH;
 
   const colorPanelStart = Date.now();
   const colors = await retrieveGenericSolidUIColors(framework);
@@ -140,12 +141,49 @@ export const run = async (settings: PluginSettings) => {
     }ms)`,
   );
 
-  postConversionComplete({
-    code,
-    htmlPreview,
+  const basePayload = {
+    // If preview is chunked, we send the size now and stream `content` separately.
+    htmlPreview: previewChunked ? { ...htmlPreview, content: "" } : htmlPreview,
     colors,
     gradients,
     settings,
     warnings: [...warnings],
-  });
+    previewChunked,
+  };
+
+  const CHUNK_SIZE = 250000; // characters; keep comfortably below postMessage limits
+
+  // When preview is chunked, always send code using the chunked path too,
+  // so UI can update once both code+preview are fully assembled.
+  const forceChunkedCode = previewChunked;
+
+  const codeTooLarge = code.length > MAX_STRING_LENGTH;
+  if (codeTooLarge || forceChunkedCode) {
+    const totalChunks = Math.ceil(code.length / CHUNK_SIZE) || 1;
+
+    postCodeChunkStart(basePayload as any, totalChunks);
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(code.length, start + CHUNK_SIZE);
+      postCodeChunk(i, code.substring(start, end));
+    }
+    postCodeChunkEnd();
+
+    if (previewChunked) {
+      const previewTotalChunks = Math.ceil(htmlPreview.content.length / CHUNK_SIZE) || 1;
+      postPreviewChunkStart(previewTotalChunks, htmlPreview.size);
+      for (let i = 0; i < previewTotalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(htmlPreview.content.length, start + CHUNK_SIZE);
+        postPreviewChunk(i, htmlPreview.content.substring(start, end));
+      }
+      postPreviewChunkEnd();
+    }
+  } else {
+    // Small payload: send everything in one message.
+    postConversionComplete({
+      code,
+      ...basePayload,
+    });
+  }
 };

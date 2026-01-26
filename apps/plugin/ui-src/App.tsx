@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PluginUI } from "plugin-ui";
 import {
   PluginSettings,
@@ -70,6 +70,24 @@ export default function App() {
     .getPropertyValue("--figma-color-bg")
     .trim();
 
+  const chunkedCodeRef = useRef<{
+    totalChunks: number;
+    chunks: string[];
+    payload: Omit<ConversionMessage, "type" | "code">;
+  } | null>(null);
+
+  const chunkedPreviewRef = useRef<{
+    totalChunks: number;
+    chunks: string[];
+    size: { width: number; height: number };
+  } | null>(null);
+
+  const pendingLargeRef = useRef<{
+    payload: any;
+    code?: string;
+    htmlPreview?: HTMLPreview;
+  } | null>(null);
+
   useEffect(() => {
     window.onmessage = (event: MessageEvent) => {
       const untypedMessage = event.data.pluginMessage as Message;
@@ -77,6 +95,9 @@ export default function App() {
 
       switch (untypedMessage.type) {
         case "conversionStart":
+          pendingLargeRef.current = null;
+          chunkedPreviewRef.current = null;
+          chunkedCodeRef.current = null;
           setState((prevState) => ({
             ...prevState,
             code: "",
@@ -94,6 +115,126 @@ export default function App() {
             hasSelection: true,
           }));
           break;
+
+        case "codeChunkStart": {
+          const msg = untypedMessage as any;
+          const totalChunks =
+            typeof msg.totalChunks === "number" ? msg.totalChunks : 0;
+
+          // Keep only the conversion payload fields; code will arrive via chunks.
+          const { totalChunks: _tc, type: _t, ...payload } = msg;
+          chunkedCodeRef.current = {
+            totalChunks,
+            chunks: new Array(totalChunks).fill(""),
+            payload,
+          };
+          if (payload?.previewChunked) {
+            pendingLargeRef.current = { payload };
+          }
+          break;
+        }
+
+        case "codeChunk": {
+          const msg = untypedMessage as any;
+          const active = chunkedCodeRef.current;
+          if (!active) break;
+          const index = typeof msg.index === "number" ? msg.index : -1;
+          if (index < 0 || index >= active.totalChunks) break;
+          active.chunks[index] = typeof msg.chunk === "string" ? msg.chunk : "";
+          break;
+        }
+
+        case "codeChunkEnd": {
+          const active = chunkedCodeRef.current;
+          if (!active) break;
+          const code = active.chunks.join("");
+          const payload = active.payload as any;
+          chunkedCodeRef.current = null;
+          // If preview is chunked, wait until previewChunkEnd so preview and code stay consistent.
+          if (payload?.previewChunked) {
+            if (!pendingLargeRef.current) pendingLargeRef.current = { payload };
+            pendingLargeRef.current.code = code;
+            if (pendingLargeRef.current.htmlPreview) {
+              const full = pendingLargeRef.current;
+              pendingLargeRef.current = null;
+              setState((prevState) => ({
+                ...prevState,
+                ...full.payload,
+                code: full.code ?? "",
+                htmlPreview: full.htmlPreview ?? emptyPreview,
+                isLoading: false,
+                hasSelection: true,
+              }));
+            }
+            break;
+          }
+
+          setState((prevState) => ({
+            ...prevState,
+            ...payload,
+            code,
+            isLoading: false,
+            hasSelection: true,
+          }));
+          break;
+        }
+
+        case "previewChunkStart": {
+          const msg = untypedMessage as any;
+          const totalChunks =
+            typeof msg.totalChunks === "number" ? msg.totalChunks : 0;
+          const size =
+            msg.size && typeof msg.size.width === "number" && typeof msg.size.height === "number"
+              ? msg.size
+              : { width: 0, height: 0 };
+          chunkedPreviewRef.current = {
+            totalChunks,
+            chunks: new Array(totalChunks).fill(""),
+            size,
+          };
+          break;
+        }
+
+        case "previewChunk": {
+          const msg = untypedMessage as any;
+          const active = chunkedPreviewRef.current;
+          if (!active) break;
+          const index = typeof msg.index === "number" ? msg.index : -1;
+          if (index < 0 || index >= active.totalChunks) break;
+          active.chunks[index] = typeof msg.chunk === "string" ? msg.chunk : "";
+          break;
+        }
+
+        case "previewChunkEnd": {
+          const active = chunkedPreviewRef.current;
+          if (!active) break;
+          const content = active.chunks.join("");
+          const htmlPreview = { size: active.size, content };
+          chunkedPreviewRef.current = null;
+
+          if (pendingLargeRef.current) {
+            pendingLargeRef.current.htmlPreview = htmlPreview;
+            if (pendingLargeRef.current.code !== undefined) {
+              const full = pendingLargeRef.current;
+              pendingLargeRef.current = null;
+              setState((prevState) => ({
+                ...prevState,
+                ...full.payload,
+                code: full.code ?? "",
+                htmlPreview: full.htmlPreview ?? emptyPreview,
+                isLoading: false,
+                hasSelection: true,
+              }));
+            }
+          } else {
+            // Fallback: update preview only.
+            setState((prevState) => ({
+              ...prevState,
+              htmlPreview,
+            }));
+          }
+          break;
+        }
 
         case "pluginSettingChanged":
           const settingsMessage = untypedMessage as SettingsChangedMessage;

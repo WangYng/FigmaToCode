@@ -1,16 +1,16 @@
 import {
+  htmlMain,
   run,
   postSettingsChanged,
 } from "backend";
 import { nodesToJSON } from "backend/src/altNodes/jsonNodeConversion";
-import { retrieveGenericSolidUIColors } from "backend/src/common/retrieveUI/retrieveColors";
 import { PluginSettings, SettingWillChangeMessage } from "types";
 
 let userPluginSettings: PluginSettings;
 
 export const defaultPluginSettings: PluginSettings = {
   framework: "HTML",
-  showLayerNames: false,
+  showLayerNames: true,
   useOldPluginVersion2025: false,
   responsiveRoot: false,
   flutterGenerationMode: "snippet",
@@ -21,7 +21,7 @@ export const defaultPluginSettings: PluginSettings = {
   useColorVariables: true,
   customTailwindPrefix: "",
   embedImages: false,
-  embedVectors: false,
+  embedVectors: true,
   embedVectorsMaxSize: 64,
   htmlGenerationMode: "html",
   tailwindGenerationMode: "jsx",
@@ -241,182 +241,31 @@ const codegenMode = async () => {
         convertedSelection,
       );
 
-      switch (language) {
-        case "html":
-          return [
-            {
-              title: "Code",
-              code: (
-                await htmlMain(
-                  convertedSelection,
-                  { ...userPluginSettings, htmlGenerationMode: "html" },
-                  true,
-                )
-              ).html,
-              language: "HTML",
-            },
-            {
-              title: "Text Styles",
-              code: htmlCodeGenTextStyles(userPluginSettings),
-              language: "HTML",
-            },
-          ];
-        case "html_jsx":
-          return [
-            {
-              title: "Code",
-              code: (
-                await htmlMain(
-                  convertedSelection,
-                  { ...userPluginSettings, htmlGenerationMode: "jsx" },
-                  true,
-                )
-              ).html,
-              language: "HTML",
-            },
-            {
-              title: "Text Styles",
-              code: htmlCodeGenTextStyles(userPluginSettings),
-              language: "HTML",
-            },
-          ];
+      // HTML-only mode: support only HTML flavors in Codegen.
+      const htmlMode =
+        language === "html_jsx"
+          ? "jsx"
+          : language === "html_svelte"
+            ? "svelte"
+            : language === "html_styled_components"
+              ? "styled-components"
+              : "html";
 
-        case "html_svelte":
-          return [
-            {
-              title: "Code",
-              code: (
-                await htmlMain(
-                  convertedSelection,
-                  { ...userPluginSettings, htmlGenerationMode: "svelte" },
-                  true,
-                )
-              ).html,
-              language: "HTML",
-            },
-            {
-              title: "Text Styles",
-              code: htmlCodeGenTextStyles(userPluginSettings),
-              language: "HTML",
-            },
-          ];
+      const html = (
+        await htmlMain(
+          convertedSelection as any,
+          { ...userPluginSettings, htmlGenerationMode: htmlMode },
+          true,
+        )
+      ).html;
 
-        case "html_styled_components":
-          return [
-            {
-              title: "Code",
-              code: (
-                await htmlMain(
-                  convertedSelection,
-                  {
-                    ...userPluginSettings,
-                    htmlGenerationMode: "styled-components",
-                  },
-                  true,
-                )
-              ).html,
-              language: "HTML",
-            },
-            {
-              title: "Text Styles",
-              code: htmlCodeGenTextStyles(userPluginSettings),
-              language: "HTML",
-            },
-          ];
-
-        case "tailwind":
-        case "tailwind_jsx":
-          return [
-            {
-              title: "Code",
-              code: await tailwindMain(convertedSelection, {
-                ...userPluginSettings,
-                tailwindGenerationMode:
-                  language === "tailwind_jsx" ? "jsx" : "html",
-              }),
-              language: "HTML",
-            },
-            // {
-            //   title: "Style",
-            //   code: tailwindMain(convertedSelection, defaultPluginSettings),
-            //   language: "HTML",
-            // },
-            {
-              title: "Tailwind Colors",
-              code: (await retrieveGenericSolidUIColors("Tailwind"))
-                .map((d) => {
-                  let str = `${d.hex};`;
-                  if (d.colorName !== d.hex) {
-                    str += ` // ${d.colorName}`;
-                  }
-                  if (d.meta) {
-                    str += ` (${d.meta})`;
-                  }
-                  return str;
-                })
-                .join("\n"),
-              language: "JAVASCRIPT",
-            },
-            {
-              title: "Text Styles",
-              code: tailwindCodeGenTextStyles(),
-              language: "HTML",
-            },
-          ];
-        case "flutter":
-          return [
-            {
-              title: "Code",
-              code: flutterMain(convertedSelection, {
-                ...userPluginSettings,
-                flutterGenerationMode: "snippet",
-              }),
-              language: "SWIFT",
-            },
-            {
-              title: "Text Styles",
-              code: flutterCodeGenTextStyles(),
-              language: "SWIFT",
-            },
-          ];
-        case "swiftUI":
-          return [
-            {
-              title: "SwiftUI",
-              code: swiftuiMain(convertedSelection, {
-                ...userPluginSettings,
-                swiftUIGenerationMode: "snippet",
-              }),
-              language: "SWIFT",
-            },
-            {
-              title: "Text Styles",
-              code: swiftUICodeGenTextStyles(),
-              language: "SWIFT",
-            },
-          ];
-        // case "compose":
-        //   return [
-        //     {
-        //       title: "Jetpack Compose",
-        //       code: composeMain(convertedSelection, {
-        //         ...userPluginSettings,
-        //         composeGenerationMode: "snippet",
-        //       }),
-        //       language: "KOTLIN",
-        //     },
-        //     {
-        //       title: "Text Styles",
-        //       code: composeCodeGenTextStyles(),
-        //       language: "KOTLIN",
-        //     },
-        //   ];
-        default:
-          break;
-      }
-
-      const blocks: CodegenResult[] = [];
-      return blocks;
+      return [
+        {
+          title: "Code",
+          code: html,
+          language: "HTML",
+        },
+      ];
     },
   );
 };
