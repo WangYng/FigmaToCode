@@ -12,13 +12,14 @@ import {
   SettingsChangedMessage,
   Warning,
 } from "types";
-import { postUISettingsChangingMessage } from "./messaging";
+import { postUIMessage, postUISettingsChangingMessage } from "./messaging";
 import copy from "copy-to-clipboard";
 
 interface AppState {
   code: string;
   selectedFramework: Framework;
   isLoading: boolean;
+  hasSelection: boolean;
   htmlPreview: HTMLPreview;
   settings: PluginSettings | null;
   colors: SolidColorConversion[];
@@ -28,11 +29,38 @@ interface AppState {
 
 const emptyPreview = { size: { width: 0, height: 0 }, content: "" };
 
+function sanitizeFilePart(input: string) {
+  // Keep filenames cross-platform safe-ish.
+  return input
+    .trim()
+    .replace(/[\/\\?%*:|"<>]/g, "-")
+    .replace(/\s+/g, " ")
+    .slice(0, 80);
+}
+
+function downloadJson(data: unknown, filename: string) {
+  const jsonText = JSON.stringify(data, null, 2);
+  const blob = new Blob([jsonText], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  // Give the browser a moment to start the download before revoking.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export default function App() {
   const [state, setState] = useState<AppState>({
     code: "",
     selectedFramework: "HTML",
     isLoading: false,
+    hasSelection: false,
     htmlPreview: emptyPreview,
     settings: null,
     colors: [],
@@ -56,6 +84,7 @@ export default function App() {
             ...prevState,
             code: "",
             isLoading: true,
+            hasSelection: true,
           }));
           break;
 
@@ -66,6 +95,7 @@ export default function App() {
             ...conversionMessage,
             selectedFramework: conversionMessage.settings.framework,
             isLoading: false,
+            hasSelection: true,
           }));
           break;
 
@@ -88,6 +118,7 @@ export default function App() {
             colors: [],
             gradients: [],
             isLoading: false,
+            hasSelection: false,
           }));
           break;
 
@@ -104,8 +135,42 @@ export default function App() {
           break;
 
         case "selection-json":
-          const json = event.data.pluginMessage.data;
-          copy(JSON.stringify(json, null, 2));
+          try {
+            const payload = event.data.pluginMessage.data as any;
+            if (payload?.message && typeof payload.message === "string") {
+              // Keep it simple: don't download a file when there's no selection.
+              window.alert(payload.message);
+              setState((prevState) => ({ ...prevState, hasSelection: false }));
+              break;
+            }
+
+            const firstName =
+              payload?.json?.[0]?.name ??
+              payload?.newConversion?.[0]?.name ??
+              payload?.oldConversion?.[0]?.name ??
+              "selection";
+            const filename = `figma-node-${sanitizeFilePart(String(firstName))}.json`;
+
+            // Handy when you want to quickly paste into tools.
+            const jsonText = JSON.stringify(payload, null, 2);
+            copy(jsonText);
+
+            // Basic safety: prevent accidentally downloading extremely large files.
+            // (Blob creation is still fine, but this avoids freezing the UI.)
+            const approxBytes = new Blob([jsonText]).size;
+            const maxBytes = 10 * 1024 * 1024; // 10MB
+            if (approxBytes > maxBytes) {
+              const ok = window.confirm(
+                `JSON is about ${Math.round(approxBytes / 1024 / 1024)}MB. Download anyway?`,
+              );
+              if (!ok) break;
+            }
+
+            downloadJson(payload, filename);
+          } catch (e) {
+            console.error("[ui] Failed handling selection-json:", e);
+          }
+          break;
 
         default:
           break;
@@ -155,6 +220,16 @@ export default function App() {
         settings={state.settings}
         colors={state.colors}
         gradients={state.gradients}
+        onDownloadNode={
+          state.hasSelection
+            ? () => {
+                postUIMessage(
+                  { type: "get-selection-json" },
+                  { targetOrigin: "*" },
+                );
+              }
+            : undefined
+        }
       />
     </div>
   );

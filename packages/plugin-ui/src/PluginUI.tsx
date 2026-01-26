@@ -37,6 +37,7 @@ type PluginUIProps = {
   colors: SolidColorConversion[];
   gradients: LinearGradientConversion[];
   isLoading: boolean;
+  onDownloadNode?: () => void;
 };
 
 const frameworks: Framework[] = ["HTML", "Tailwind", "Flutter", "SwiftUI"];
@@ -149,7 +150,7 @@ export const PluginUI = (props: PluginUIProps) => {
           backgroundColor: "rgba(255,255,255,0.12)",
         }}
       ></div>
-      <div className="flex flex-col h-full overflow-y-auto">
+      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
         {showAbout ? (
           <About
             useOldPluginVersion={props.settings?.useOldPluginVersion2025}
@@ -206,6 +207,16 @@ export const PluginUI = (props: PluginUIProps) => {
                   copy(value);
                 }}
               />
+            )}
+
+            {props.onDownloadNode && (
+              <button
+                className="w-full h-9 flex items-center justify-center rounded-md text-sm font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => props.onDownloadNode?.()}
+                aria-label="Download selected node JSON"
+              >
+                Download Node JSON
+              </button>
             )}
           </div>
         )}
