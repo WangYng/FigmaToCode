@@ -1,6 +1,9 @@
 import { addWarning } from "../common/commonConversionWarnings";
 import { PluginSettings } from "types";
-import { variableToColorName } from "../common/variableToColorName";
+import {
+  cssVariableName,
+  variableToColorName,
+} from "../common/variableToColorName";
 import { HasGeometryTrait, Node, Paint } from "../api_types";
 import { calculateRectangleFromBoundingBox } from "../common/commonPosition";
 import { isLikelyIcon } from "./iconDetection";
@@ -156,10 +159,7 @@ const memoizedVariableToColorName = async (
   variableId: string,
 ): Promise<string> => {
   if (!variableCache.has(variableId)) {
-    const colorName = (await variableToColorName(variableId)).replaceAll(
-      ",",
-      "",
-    );
+    const colorName = await variableToColorName(variableId);
     variableCache.set(variableId, colorName);
     return colorName;
   }
@@ -210,12 +210,9 @@ const collectNodeColorVariables = async (
         paint.boundVariables.color.name || paint.variableColorName;
 
       if (variableName) {
-        // Sanitize the variable name for CSS
-        const sanitizedVarName = variableName.replace(/[^a-zA-Z0-9_-]/g, "-");
-
         const colorInfo = {
           variableId: paint.boundVariables.color.id,
-          variableName: sanitizedVarName,
+          variableName: cssVariableName(variableName),
         };
 
         // Create hex representation of the color
@@ -852,4 +849,3 @@ export const nodesToJSON = async (
 
   return result;
 };
-

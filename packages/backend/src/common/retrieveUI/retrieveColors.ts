@@ -3,6 +3,7 @@ import {
   htmlColorFromFill,
   htmlGradientFromFills,
 } from "../../html/builderImpl/htmlColor";
+import { cssVariableName } from "../variableToColorName";
 import { calculateContrastRatio } from "./commonUI";
 import {
   LinearGradientConversion,
@@ -92,9 +93,9 @@ export const retrieveGenericLinearGradients = async (
                 const variableId = stop.boundVariables.color.id;
                 const variable = figma.variables.getVariableById(variableId);
                 if (variable) {
-                  (stop as any).variableColorName = variable.name
-                    .replace(/\s+/g, "-")
-                    .toLowerCase();
+                  (stop as any).variableColorName = cssVariableName(
+                    variable.name,
+                  );
                 }
               } catch (e) {
                 console.error(

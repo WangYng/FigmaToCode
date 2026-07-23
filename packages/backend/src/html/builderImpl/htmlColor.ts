@@ -1,5 +1,6 @@
 import { numberToFixedString } from "../../common/numToAutoFixed";
 import { retrieveTopFill } from "../../common/retrieveFill";
+import { cssVariableName } from "../../common/variableToColorName";
 import { GradientPaint, Paint } from "../../api_types";
 
 /**
@@ -13,7 +14,7 @@ export const processColorWithVariable = (fill: {
   const opacity = fill.opacity ?? 1;
 
   if (fill.variableColorName) {
-    const varName = fill.variableColorName;
+    const varName = cssVariableName(fill.variableColorName);
     const fallbackColor = htmlColor(fill.color, opacity);
     return `var(--${varName}, ${fallbackColor})`;
   }
