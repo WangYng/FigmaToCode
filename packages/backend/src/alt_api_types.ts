@@ -4,7 +4,6 @@ export type AltNode = Node & {
   styledTextSegments: Array<
     Pick<StyledTextSegment, any | "characters" | "start" | "end">
   >;
-  cumulativeRotation: number;
   uniqueName: string;
   canBeFlattened: boolean;
   isRelative: boolean;

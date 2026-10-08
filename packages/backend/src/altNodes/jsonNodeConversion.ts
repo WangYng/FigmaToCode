@@ -5,7 +5,7 @@ import {
   variableToColorName,
 } from "../common/variableToColorName";
 import { HasGeometryTrait, Node, Paint } from "../api_types";
-import { calculateRectangleFromBoundingBox } from "../common/commonPosition";
+import { getNodeGeometry } from "../common/nodeGeometry";
 import { isLikelyIcon } from "./iconDetection";
 import { AltNode } from "../alt_api_types";
 
@@ -71,17 +71,23 @@ const isPureVectorAsset = (node: any): boolean => {
  * - remove the mask child from children (mask layer is not rendered in Figma)
  */
 const normalizeMaskGroupToClipping = (node: any) => {
-  if (!node || !Array.isArray(node.children) || node.children.length < 2) return;
+  if (!node || !Array.isArray(node.children) || node.children.length < 2)
+    return;
 
   const parentWidth = typeof node.width === "number" ? node.width : undefined;
-  const parentHeight = typeof node.height === "number" ? node.height : undefined;
+  const parentHeight =
+    typeof node.height === "number" ? node.height : undefined;
   if (!parentWidth || !parentHeight) return;
 
   // Only handle the most common ordering: mask is the first child.
   const mask = node.children[0];
   if (!mask || mask.visible === false) return;
   if (mask.isMask !== true) return;
-  if (mask.maskType && mask.maskType !== "ALPHA" && mask.maskType !== "LUMINANCE")
+  if (
+    mask.maskType &&
+    mask.maskType !== "ALPHA" &&
+    mask.maskType !== "LUMINANCE"
+  )
     return;
 
   // Restrict to masks we can safely approximate with rounded-rect clipping.
@@ -379,7 +385,7 @@ function adjustChildrenOrder(node: any) {
  * @param figmaNode The corresponding Figma node
  * @param settings Plugin settings
  * @param parentNode Optional parent node reference to set
- * @param parentCumulativeRotation Optional parent cumulative rotation to inherit
+ * @param figmaParent Original parent used to resolve local geometry
  * @returns Potentially modified jsonNode, array of nodes (for inlined groups), or null
  */
 const processNodePair = async (
@@ -387,7 +393,7 @@ const processNodePair = async (
   figmaNode: SceneNode,
   settings: PluginSettings,
   parentNode?: AltNode,
-  parentCumulativeRotation: number = 0,
+  figmaParent?: SceneNode,
 ): Promise<Node | Node[] | null> => {
   totalNodesProcessed++;
   if (totalNodesProcessed > 500) {
@@ -402,13 +408,6 @@ const processNodePair = async (
 
   // Handle node type-specific conversions.
   const nodeType = jsonNode.type;
-
-  // Store the cumulative rotation (parent's cumulative + node's own)
-  if (parentNode) {
-    // Only add cumulative when there is a parent. This is useful for the GROUP -> FRAME transformation, where
-    // we want to move the rotation of the GROUP to children, but want to se FRAME to 0.
-    jsonNode.cumulativeRotation = parentCumulativeRotation;
-  }
 
   // Handle empty frames and convert to rectangles
   if (
@@ -425,12 +424,8 @@ const processNodePair = async (
       figmaNode,
       settings,
       parentNode,
-      parentCumulativeRotation,
+      figmaParent,
     );
-  }
-
-  if ("rotation" in jsonNode && jsonNode.rotation) {
-    jsonNode.rotation = -jsonNode.rotation * (180 / Math.PI);
   }
 
   // Convert GROUP to FRAME to preserve container structure
@@ -536,49 +531,19 @@ const processNodePair = async (
     }
   }
 
-  // Always copy size and position
-  if ("absoluteBoundingBox" in jsonNode && jsonNode.absoluteBoundingBox) {
-    if (jsonNode.parent) {
-      // Extract width and height from bounding box and rotation. This is necessary because Figma JSON API doesn't have width and height.
-      const rect = calculateRectangleFromBoundingBox(
-        {
-          width: jsonNode.absoluteBoundingBox.width,
-          height: jsonNode.absoluteBoundingBox.height,
-          x:
-            jsonNode.absoluteBoundingBox.x -
-            (jsonNode.parent?.absoluteBoundingBox.x || 0),
-          y:
-            jsonNode.absoluteBoundingBox.y -
-            (jsonNode.parent?.absoluteBoundingBox.y || 0),
-        },
-        -((jsonNode.rotation || 0) + (jsonNode.cumulativeRotation || 0)),
-      );
-
-      jsonNode.width = rect.width;
-      jsonNode.height = rect.height;
-      jsonNode.x = rect.left;
-      jsonNode.y = rect.top;
-    } else {
-      jsonNode.width = jsonNode.absoluteBoundingBox.width;
-      jsonNode.height = jsonNode.absoluteBoundingBox.height;
-      jsonNode.x = 0;
-      jsonNode.y = 0;
-    }
-  }
+  Object.assign(jsonNode, getNodeGeometry(figmaNode, figmaParent));
 
   // Add canBeFlattened property
   const svgExportExplicitlyEnabled = hasSvgExportSettings(jsonNode);
-  if ((settings.embedVectors || svgExportExplicitlyEnabled) && !parentNode?.canBeFlattened) {
+  if (
+    (settings.embedVectors || svgExportExplicitlyEnabled) &&
+    !parentNode?.canBeFlattened
+  ) {
     // If embedVectors is enabled, we use the full icon heuristic.
     // If embedVectors is disabled, we ONLY flatten nodes that explicitly opted into SVG export.
-    const canFlatten =
-      settings.embedVectors
-        ? isLikelyIcon(
-            jsonNode as any,
-            false,
-            settings.embedVectorsMaxSize ?? 64,
-          )
-        : svgExportExplicitlyEnabled;
+    const canFlatten = settings.embedVectors
+      ? isLikelyIcon(jsonNode as any, false, settings.embedVectorsMaxSize ?? 64)
+      : svgExportExplicitlyEnabled;
     (jsonNode as any).canBeFlattened = canFlatten;
 
     // If this node will be flattened to SVG, collect its color variables
@@ -679,10 +644,6 @@ const processNodePair = async (
       figmaChildrenById.set(child.id, child);
     });
 
-    const cumulative =
-      parentCumulativeRotation +
-      (jsonNode.type === "GROUP" ? jsonNode.rotation || 0 : 0);
-
     // Process children and handle potential null returns
     const processedChildren = [];
 
@@ -696,7 +657,7 @@ const processNodePair = async (
         figmaChild,
         settings,
         jsonNode,
-        cumulative,
+        figmaNode,
       );
 
       if (processedChild !== null) {
@@ -793,32 +754,13 @@ export const nodesToJSON = async (
         })) as any
       ).document;
 
-      let nodeCumulativeRotation = 0;
-
-      // Wire GROUPs into FRAME.
-      if (node.type === "GROUP") {
-        nodeDoc.type = "FRAME";
-
-        // Fix rotation for children.
-        if ("rotation" in nodeDoc && nodeDoc.rotation) {
-          nodeCumulativeRotation = -nodeDoc.rotation * (180 / Math.PI);
-          nodeDoc.rotation = 0;
-        }
-      }
-
       console.log(
         `[benchmark][inside nodesToJSON] Single node export: ${Date.now() - exportStart}ms`,
       );
 
       // Process the pair immediately
       const processStart = Date.now();
-      const processedNode = await processNodePair(
-        nodeDoc,
-        node,
-        settings,
-        undefined,
-        nodeCumulativeRotation,
-      );
+      const processedNode = await processNodePair(nodeDoc, node, settings);
 
       console.log(
         `[benchmark][inside nodesToJSON] Single node process: ${Date.now() - processStart}ms`,

@@ -80,8 +80,8 @@ export const htmlVisibility = (node: SceneNodeMixin): string => {
   return "";
 };
 
-export const htmlRotation = (node: { rotation?: number; cumulativeRotation?: number }): string[] => {
-  const rotation = -Math.round((node.rotation || 0) + (node.cumulativeRotation || 0)) || 0;
+export const htmlRotation = (node: { rotation?: number }): string[] => {
+  const rotation = -(node.rotation || 0);
 
   if (rotation !== 0) {
     return [

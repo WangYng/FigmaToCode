@@ -1,4 +1,5 @@
 import { formatCSSDeclarations, formatCSS } from "../common/formatCSS";
+import { escapeHTML } from "../common/escapeHTML";
 import { HtmlDefaultBuilder } from "./htmlDefaultBuilder";
 import { htmlColorFromFills } from "./builderImpl/htmlColor";
 import {
@@ -55,7 +56,7 @@ export class HtmlTextBuilder extends HtmlDefaultBuilder {
 
       const result = {
         style: styleAttributes,
-        text: segment.characters.split("\n").join("<br/>"),
+        text: escapeHTML(segment.characters).replace(/\r\n?|\n/g, "<br/>"),
         openTypeFeatures: segment.openTypeFeatures,
       };
 

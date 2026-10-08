@@ -3,6 +3,8 @@ import { HtmlTextBuilder } from "./htmlTextBuilder";
 import { HtmlDefaultBuilder } from "./htmlDefaultBuilder";
 import { htmlAutoLayoutProps } from "./builderImpl/htmlAutoLayout";
 import { formatCSS } from "../common/formatCSS";
+import { formatStyleAttribute } from "../common/commonFormatAttributes";
+import { getRotatedBounds } from "../common/nodeGeometry";
 import {
   PluginSettings,
   HTMLPreview,
@@ -49,13 +51,29 @@ export const generateHTMLPreview = async (
     result.html = `<div style="width: 100%; height: 100%">${result.html}</div>`;
   }
 
+  const sizes = nodes.map((node) => getRootBounds(node, settings));
   return {
     size: {
-      width: Math.max(...nodes.map((node) => node.width)),
-      height: nodes.reduce((sum, node) => sum + node.height, 0),
+      width: Math.max(0, ...sizes.map((size) => size.width)),
+      height: sizes.reduce((sum, size) => sum + size.height, 0),
     },
     content: result.html,
   };
+};
+
+const isEmbeddedVector = (node: SceneNode, settings: HTMLSettings): boolean =>
+  settings.embedVectors && !!(node as AltNode<SceneNode>).canBeFlattened;
+
+const getRootBounds = (node: SceneNode, settings: HTMLSettings) => {
+  // Exported SVGs already contain the node's rotation.
+  if (isEmbeddedVector(node, settings) && node.absoluteBoundingBox) {
+    return { ...node.absoluteBoundingBox, x: 0, y: 0 };
+  }
+  return getRotatedBounds(
+    node.width,
+    node.height,
+    "rotation" in node ? -node.rotation : 0,
+  );
 };
 
 const htmlWidgetGenerator = async (
@@ -64,7 +82,34 @@ const htmlWidgetGenerator = async (
 ): Promise<string> => {
   // filter non visible nodes. This is necessary at this step because conversion already happened.
   const promiseOfConvertedCode = getVisibleNodes(sceneNode).map(
-    convertNode(settings),
+    async (node) => {
+      if (
+        !node.parent &&
+        "rotation" in node &&
+        node.rotation &&
+        !isEmbeddedVector(node, settings)
+      ) {
+        // Give a selected rotated root its own viewport so its intrinsic size is
+        // preserved and negative rotated corners remain visible in the preview.
+        const bounds = getRootBounds(node, settings);
+        const content = await convertNode(settings)({
+          ...node,
+          x: -bounds.x,
+          y: -bounds.y,
+          layoutPositioning: "ABSOLUTE",
+          layoutSizingHorizontal: "FIXED",
+          layoutSizingVertical: "FIXED",
+        } as SceneNode);
+        if (!content) return "";
+        const style = formatStyleAttribute([
+          "position: relative",
+          formatCSS("width", bounds.width),
+          formatCSS("height", bounds.height),
+        ]);
+        return `\n<div${style}>${indentString(content)}\n</div>`;
+      }
+      return convertNode(settings)(node);
+    },
   );
   const code = (await Promise.all(promiseOfConvertedCode)).join("");
   return code;
@@ -187,7 +232,7 @@ const htmlText = (node: TextNode, settings: HTMLSettings): string => {
             : style.openTypeFeatures.SUPS === true
               ? "sup"
               : "span";
-        return `<${tag} style="${style.style}">${style.text}</${tag}>`;
+        return `<${tag}${formatStyleAttribute([style.style])}>${style.text}</${tag}>`;
       })
       .join("");
   }

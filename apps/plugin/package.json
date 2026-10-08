@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "test": "node --test test/*.test.cjs",
     "build": "pnpm run build:ui && pnpm run build:main --minify --tree-shaking=true",
     "build:main": "esbuild plugin-src/code.ts --bundle --target=ES6 --outfile=dist/code.js",
     "build:ui": "vite build --minify esbuild --emptyOutDir=false",
