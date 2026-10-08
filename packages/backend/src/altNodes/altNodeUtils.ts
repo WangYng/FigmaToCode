@@ -1,16 +1,28 @@
 import { exportAsyncProxy } from "../common/exportAsyncProxy";
 import { addWarning } from "../common/commonConversionWarnings";
+import { getSVGGeometry } from "../common/svgGeometry";
 
 export const renderAndAttachSVG = async (node: any) => {
   if (node.canBeFlattened) {
-    if (node.svg) {
+    if (node.svg && node.svgGeometry) {
       return node;
     }
 
     try {
       const svg = (await exportAsyncProxy<string>(node, {
         format: "SVG_STRING",
+        contentsOnly: true,
+        useAbsoluteBounds: true,
       })) as string;
+
+      if (!node.absoluteBoundingBox || !node.absoluteTransform) {
+        throw new Error("Missing SVG export geometry");
+      }
+      const svgGeometry = getSVGGeometry(
+        svg,
+        node.absoluteBoundingBox,
+        node.absoluteTransform,
+      );
 
       // Process the SVG to replace colors with variable references
       if (node.colorVariableMappings && node.colorVariableMappings.size > 0) {
@@ -62,6 +74,7 @@ export const renderAndAttachSVG = async (node: any) => {
       } else {
         node.svg = svg;
       }
+      node.svgGeometry = svgGeometry;
     } catch (error) {
       addWarning(`Failed rendering SVG for ${node.name}`);
       console.error(`Error rendering SVG for ${node.type}:${node.id}`);

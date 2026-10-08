@@ -58,9 +58,19 @@ export type ErrorMessage = Message & {
 // Nodes
 export type AltNodeMetadata = {
   canBeFlattened: boolean;
+  localTransform?: Transform;
+  svgGeometry?: SVGGeometry;
   svg?: string;
   base64?: string;
 };
+
+export interface SVGGeometry {
+  /** SVG viewport pixels to the node's untransformed local coordinates. */
+  viewportToLocal: Transform;
+  viewport: { width: number; height: number };
+  /** Page-space export rectangle, explicitly selected with useAbsoluteBounds. */
+  exportBounds: Rect;
+}
 export type AltNode<T extends BaseNode> = T & AltNodeMetadata;
 
 export type ExportableNode = SceneNode & ExportMixin & MinimalFillsMixin;

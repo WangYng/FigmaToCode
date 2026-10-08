@@ -1,5 +1,6 @@
 import { numberToFixedString } from "../../common/numToAutoFixed";
 import { formatCSS } from "../../common/formatCSS";
+import { cssMatrix, getLinearTransform } from "../../common/nodeGeometry";
 
 // Opacity is unitless and ranges from 0 to 1.
 export const htmlOpacity = (node: MinimalBlendMixin): string => {
@@ -80,7 +81,19 @@ export const htmlVisibility = (node: SceneNodeMixin): string => {
   return "";
 };
 
-export const htmlRotation = (node: { rotation?: number }): string[] => {
+export const htmlRotation = (node: {
+  rotation?: number;
+  localTransform?: Transform;
+}): string[] => {
+  if (node.localTransform) {
+    const matrix = cssMatrix(getLinearTransform(node));
+    return matrix === "matrix(1, 0, 0, 1, 0, 0)"
+      ? []
+      : [
+          formatCSS("transform", matrix),
+          formatCSS("transform-origin", "top left"),
+        ];
+  }
   const rotation = -(node.rotation || 0);
 
   if (rotation !== 0) {

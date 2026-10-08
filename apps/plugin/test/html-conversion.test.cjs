@@ -11,6 +11,9 @@ const bundle = buildSync({
       `export { nodesToJSON } from ${JSON.stringify(`${backend}/altNodes/jsonNodeConversion.ts`)};`,
       `export { htmlMain, generateHTMLPreview } from ${JSON.stringify(`${backend}/html/htmlMain.ts`)};`,
       `export { getNodeGeometry } from ${JSON.stringify(`${backend}/common/nodeGeometry.ts`)};`,
+      `export { relativeToParent, getTransformedBounds, cssMatrix } from ${JSON.stringify(`${backend}/common/nodeGeometry.ts`)};`,
+      `export { getSVGGeometry, svgForHTML } from ${JSON.stringify(`${backend}/common/svgGeometry.ts`)};`,
+      `export { retrieveSVGAssets } from ${JSON.stringify(`${backend}/common/retrieveUI/retrieveSVGAssets.ts`)};`,
     ].join("\n"),
     resolveDir: backend,
     loader: "ts",
@@ -21,14 +24,18 @@ const bundle = buildSync({
   write: false,
 }).outputFiles[0].text;
 
-function runtime() {
+function runtime(figmaOverrides = {}) {
   const module = { exports: {} };
   vm.runInNewContext(bundle, {
     module,
     exports: module.exports,
     require,
     console: { log() {}, warn() {}, error() {} },
-    figma: { mixed: Symbol("mixed"), ui: { postMessage() {} } },
+    figma: {
+      mixed: Symbol("mixed"),
+      ui: { postMessage() {} },
+      ...figmaOverrides,
+    },
     setTimeout,
   });
   return module.exports;
@@ -376,7 +383,11 @@ test("positions are relative to a rotated frame, not its page-space bounding box
   near(converted.children[0].rotation, -45);
   const { html } = await api.htmlMain([converted], settings);
   assert.match(html, /left: 12px; top: -24px; position: absolute/);
-  assert.ok(html.includes("rotate(45deg)"));
+  assert.ok(
+    html.includes(
+      "matrix(0.7071067812, 0.7071067812, -0.7071067812, 0.7071067812, 0, 0)",
+    ),
+  );
 });
 
 test("nested groups keep one rotation per DOM container", async () => {
@@ -432,7 +443,7 @@ test("selected rotated roots retain intrinsic dimensions inside a fitted viewpor
       "width: 100px; height: 50px; left: 50px; top: 0px",
     ),
   );
-  assert.ok(preview.content.includes("rotate(90deg)"));
+  assert.ok(preview.content.includes("matrix(0, 1, -1, 0, 0, 0)"));
   assert.ok(!preview.content.includes("width: 100%"));
 
   const diagonal = await api.nodesToJSON(
@@ -451,25 +462,321 @@ test("fractional rotations are not rounded to whole degrees", async () => {
     settings,
   );
   const { html } = await api.htmlMain(nodes, settings);
-  assert.ok(html.includes("rotate(37.50deg)"));
+  const coefficients = html
+    .match(/transform: matrix\(([^)]+)\)/)[1]
+    .split(",")
+    .map(Number);
+  near(coefficients[0], Math.cos((37.5 * Math.PI) / 180));
+  near(coefficients[1], Math.sin((37.5 * Math.PI) / 180));
 });
 
-test("SVG exports use their rendered bounds without applying rotation twice", async () => {
+function point(transform, x, y) {
+  return transform.map((row) => row[0] * x + row[1] * y + row[2]);
+}
+
+function assertMatrix(actual, expected) {
+  actual.forEach((row, i) =>
+    row.forEach((value, j) => near(value, expected[i][j])),
+  );
+}
+
+test("full local matrices preserve horizontal/vertical reflection, scale and shear", async () => {
   const api = runtime();
-  const svg = '<svg width="106" height="106"><path d="M0 0h20v20z"/></svg>';
-  const node = {
-    ...liveNode(),
-    rotation: -45,
-    canBeFlattened: true,
-    svg,
-    absoluteBoundingBox: { x: 0, y: 0, width: 106, height: 106 },
+  const parentMatrix = compose(rotation(37.5, 137, 6565), [
+    [-1, 0, 0],
+    [0, 1, 0],
+  ]);
+  for (const local of [
+    [
+      [-1, 0, 74],
+      [0, 1, 0],
+    ],
+    [
+      [1, 0, 0],
+      [0, -1, 71],
+    ],
+    [
+      [-1, 0, 74],
+      [0, -1, 71],
+    ],
+    compose(rotation(25, 12, 9), [
+      [-1, 0, 0],
+      [0, 1, 0],
+    ]),
+    [
+      [1.2, 0.3, 12],
+      [0.1, 0.8, 9],
+    ],
+  ]) {
+    const child = liveNode({ absoluteTransform: compose(parentMatrix, local) });
+    const parent = liveNode({
+      type: "GROUP",
+      absoluteTransform: parentMatrix,
+      children: [child],
+    });
+    const [converted] = await api.nodesToJSON([parent], settings);
+    const convertedChild = converted.children[0];
+    assertMatrix(convertedChild.localTransform, local);
+    assertMatrix(convertedChild.absoluteTransform, child.absoluteTransform);
+    assertMatrix(
+      compose(converted.absoluteTransform, convertedChild.localTransform),
+      child.absoluteTransform,
+    );
+    near(convertedChild.x, local[0][2]);
+    near(convertedChild.y, local[1][2]);
+  }
+});
+
+test("mirrored selected roots fit the correct four-corner bounds without a half-turn", async () => {
+  const api = runtime();
+  for (const matrix of [
+    [
+      [-1, 0, 137],
+      [0, 1, 6565],
+    ],
+    [
+      [1, 0, 137],
+      [0, -1, 6565],
+    ],
+    compose(rotation(35, 137, 6565), [
+      [-1, 0, 0],
+      [0, 1, 0],
+    ]),
+  ]) {
+    const nodes = await api.nodesToJSON(
+      [liveNode({ width: 74, height: 71, absoluteTransform: matrix })],
+      settings,
+    );
+    const preview = await api.generateHTMLPreview(nodes, settings);
+    const corners = [
+      [0, 0],
+      [74, 0],
+      [0, 71],
+      [74, 71],
+    ].map(([x, y]) => point(matrix, x, y));
+    near(
+      preview.size.width,
+      Math.max(...corners.map((p) => p[0])) -
+        Math.min(...corners.map((p) => p[0])),
+    );
+    near(
+      preview.size.height,
+      Math.max(...corners.map((p) => p[1])) -
+        Math.min(...corners.map((p) => p[1])),
+    );
+    assert.doesNotMatch(preview.content, /rotate\(180/);
+    assert.ok(
+      preview.content.includes(
+        api.cssMatrix([
+          [matrix[0][0], matrix[0][1], 0],
+          [matrix[1][0], matrix[1][1], 0],
+        ]),
+      ),
+    );
+  }
+});
+
+function svgFixture() {
+  const childLocal = rotation(20, 18, 13);
+  const parentMatrix = [
+    [-1, 0, 137.00116],
+    [0, 1, 6565],
+  ];
+  const child = liveNode({
+    type: "VECTOR",
+    name: "Eye",
+    width: 12.4,
+    height: 8.6,
+    absoluteTransform: compose(parentMatrix, childLocal),
+  });
+  const parent = liveNode({
+    type: "GROUP",
+    name: "Mirrored group",
+    width: 73.92104,
+    height: 70.61537,
+    absoluteTransform: parentMatrix,
+    children: [child],
+  });
+  const bounds = jsonNode(child).absoluteBoundingBox;
+  // Deliberately different render bounds, rounded width/height, and nonzero viewBox.
+  child.absoluteRenderBounds = {
+    x: bounds.x - 0.312,
+    y: bounds.y - 0.312,
+    width: bounds.width + 0.624,
+    height: bounds.height + 0.624,
   };
-  const preview = await api.generateHTMLPreview([node], {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(bounds.width)}" height="${Math.ceil(bounds.height)}" viewBox="-2 3 ${bounds.width} ${bounds.height}"><path d="M-2 3h4v4h-4z"/></svg>`;
+  const requests = [];
+  const api = runtime({
+    getNodeByIdAsync: async (id) => {
+      assert.equal(id, child.id);
+      return {
+        exportAsync: async (options) => {
+          requests.push(options);
+          return svg;
+        },
+      };
+    },
+  });
+  return { api, parent, child, bounds, svg, requests };
+}
+
+test("nested SVG cancels baked page transforms once and uses explicit geometry export bounds", async () => {
+  const { api, parent, child, bounds, svg, requests } = svgFixture();
+  const svgSettings = { ...settings, embedVectors: true };
+  const nodes = await api.nodesToJSON([parent], svgSettings);
+  const { html } = await api.htmlMain(nodes, svgSettings);
+  const convertedChild = nodes[0].children[0];
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].contentsOnly, true);
+  assert.equal(requests[0].useAbsoluteBounds, true);
+  const geometry = convertedChild.svgGeometry;
+  assert.equal(JSON.stringify(geometry.exportBounds), JSON.stringify(bounds));
+  assert.equal(convertedChild.svg, svg);
+  const resultingMapping = compose(
+    compose(nodes[0].absoluteTransform, convertedChild.localTransform),
+    geometry.viewportToLocal,
+  );
+  for (const [x, y] of [
+    [0, 0],
+    [bounds.width, 0],
+    [0, bounds.height],
+    [bounds.width, bounds.height],
+  ]) {
+    const actual = point(resultingMapping, x, y);
+    near(actual[0], bounds.x + x);
+    near(actual[1], bounds.y + y);
+  }
+  assert.match(html, /left: 18px; top: 13px; position: absolute/);
+  assert.match(html, /overflow: visible/);
+  assert.ok(html.includes('viewBox="-2 3'));
+  await api.generateHTMLPreview(nodes, svgSettings);
+  assert.equal(requests.length, 1, "preview reuses the SVG export");
+  const assets = api.retrieveSVGAssets(nodes);
+  assert.equal(assets.length, 1);
+  assert.equal(assets[0].svg, svg, "asset copy keeps the unmodified export");
+});
+
+test("selected mirrored SVG retains its cache and includes effect bounds in preview", async () => {
+  const { api, child, svg, requests } = svgFixture();
+  const svgSettings = { ...settings, embedVectors: true };
+  const nodes = await api.nodesToJSON([child], svgSettings);
+  const preview = await api.generateHTMLPreview(nodes, svgSettings);
+  near(preview.size.width, child.absoluteRenderBounds.width);
+  near(preview.size.height, child.absoluteRenderBounds.height);
+  assert.ok(
+    nodes[0].svgGeometry,
+    "root wrapper must not lose the original node's SVG metadata",
+  );
+  assert.equal(api.retrieveSVGAssets(nodes)[0].svg, svg);
+  await api.htmlMain(nodes, svgSettings);
+  assert.equal(requests.length, 1);
+});
+
+test("SVG viewport rounding is compensated without changing nonzero viewBox origin", () => {
+  const api = runtime();
+  const bounds = { x: 63.08012, y: 6565, width: 12.312, height: 8.624 };
+  const transform = [
+    [-1, 0, 75.39212],
+    [0, 1, 6565],
+  ];
+  const svg =
+    '<svg width="13" height="9" viewBox="-2 3 12.312 8.624"><path/></svg>';
+  const geometry = api.getSVGGeometry(svg, bounds, transform);
+  assertMatrix(compose(transform, geometry.viewportToLocal), [
+    [1, 0, bounds.x],
+    [0, 1, bounds.y],
+  ]);
+  const inline = api.svgForHTML(svg, geometry);
+  assert.match(inline, /width="12.312" height="8.624"/);
+  assert.match(inline, /viewBox="-2 3 12.312 8.624"/);
+  assert.match(inline, /overflow: visible/);
+  assert.throws(
+    () =>
+      api.getSVGGeometry('<svg viewBox="0 0 0 1"></svg>', bounds, transform),
+    /invalid viewport/,
+  );
+  assert.throws(
+    () =>
+      api.getSVGGeometry(svg, bounds, [
+        [0, 0, 0],
+        [0, 1, 0],
+      ]),
+    /singular/,
+  );
+});
+
+test("mirrored Auto Layout containers retain Flex positioning", async () => {
+  const api = runtime();
+  const parentMatrix = [
+    [-1, 0, 300],
+    [0, 1, 50],
+  ];
+  const child = liveNode({
+    name: "Button",
+    absoluteTransform: compose(parentMatrix, rotation(0, 20, 10)),
+  });
+  const parent = liveNode({
+    type: "FRAME",
+    layoutMode: "HORIZONTAL",
+    absoluteTransform: parentMatrix,
+    children: [child],
+  });
+  const nodes = await api.nodesToJSON([parent], settings);
+  const { html } = await api.htmlMain(nodes, settings);
+  const childStyle = html.match(/data-layer="Button"[^>]*style="([^"]*)"/)[1];
+  assert.doesNotMatch(childStyle, /position: absolute|left:|top:|transform:/);
+  assert.match(html, /display: inline-flex/);
+  assert.match(html, /matrix\(-1, 0, 0, 1, 0, 0\)/);
+});
+
+test("SVG icons in Auto Layout reserve their box and keep compensation out of flow", async () => {
+  const { api, parent } = svgFixture();
+  parent.type = "FRAME";
+  parent.layoutMode = "HORIZONTAL";
+  const nodes = await api.nodesToJSON([parent], {
     ...settings,
     embedVectors: true,
   });
-  assert.equal(preview.size.width, 106);
-  assert.equal(preview.size.height, 106);
-  assert.ok(preview.content.includes(svg));
-  assert.ok(!preview.content.includes("rotate("));
+  const { html } = await api.htmlMain(nodes, {
+    ...settings,
+    embedVectors: true,
+  });
+  const style = html.match(/data-layer="Eye"[^>]*style="([^"]*)"/)[1];
+  assert.match(style, /width: 12.40px; height: 8.60px/);
+  assert.match(style, /position: relative/);
+  assert.doesNotMatch(style, /position: absolute|left:|top:/);
+  assert.match(
+    html,
+    /position: absolute; left: 0; top: 0; transform-origin: top left/,
+  );
+});
+
+test("failed SVG exports fall back to HTML without losing the node transform", async () => {
+  const api = runtime({
+    getNodeByIdAsync: async () => ({
+      exportAsync: async () => {
+        throw new Error("export failed");
+      },
+    }),
+  });
+  const nodes = await api.nodesToJSON(
+    [
+      liveNode({
+        type: "VECTOR",
+        absoluteTransform: [
+          [-1, 0, 120],
+          [0, 1, 0],
+        ],
+      }),
+    ],
+    { ...settings, embedVectors: true },
+  );
+  const { html } = await api.htmlMain(nodes, {
+    ...settings,
+    embedVectors: true,
+  });
+  assert.match(html, /matrix\(-1, 0, 0, 1, 0, 0\)/);
+  assert.doesNotMatch(html, /data-svg-wrapper/);
+  assert.equal(api.retrieveSVGAssets(nodes).length, 0);
 });

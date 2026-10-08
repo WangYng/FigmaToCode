@@ -1,28 +1,8 @@
 export const getCommonPositionValue = (
   node: SceneNode,
 ): { x: number; y: number } => {
-  const anyNode = node as any;
-  const parent: any = anyNode.parent;
-
-  if (parent?.absoluteBoundingBox) {
-    if (anyNode.svg && anyNode.absoluteBoundingBox) {
-      // When embedding vectors, we need to use the absolute position, since it already includes the rotation.
-      return {
-        x: anyNode.absoluteBoundingBox.x - parent.absoluteBoundingBox.x,
-        y: anyNode.absoluteBoundingBox.y - parent.absoluteBoundingBox.y,
-      };
-    }
-
-    return { x: node.x, y: node.y };
-  }
-
-  if (node.parent && node.parent.type === "GROUP") {
-    return {
-      x: node.x - node.parent.x,
-      y: node.y - node.parent.y,
-    };
-  }
-
+  // Conversion already expresses positions relative to the actual DOM parent.
+  // SVG viewport compensation belongs inside its wrapper, not in left/top.
   return {
     x: node.x,
     y: node.y,

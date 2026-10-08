@@ -4,7 +4,14 @@ import { HtmlDefaultBuilder } from "./htmlDefaultBuilder";
 import { htmlAutoLayoutProps } from "./builderImpl/htmlAutoLayout";
 import { formatCSS } from "../common/formatCSS";
 import { formatStyleAttribute } from "../common/commonFormatAttributes";
-import { getRotatedBounds } from "../common/nodeGeometry";
+import {
+  cssMatrix,
+  getLinearTransform,
+  getTransformedBounds,
+} from "../common/nodeGeometry";
+import { svgForHTML } from "../common/svgGeometry";
+import { commonIsAbsolutePosition } from "../common/commonPosition";
+import { htmlRotation } from "./builderImpl/htmlBlend";
 import {
   PluginSettings,
   HTMLPreview,
@@ -51,7 +58,7 @@ export const generateHTMLPreview = async (
     result.html = `<div style="width: 100%; height: 100%">${result.html}</div>`;
   }
 
-  const sizes = nodes.map((node) => getRootBounds(node, settings));
+  const sizes = nodes.map((node) => getRootBounds(node));
   return {
     size: {
       width: Math.max(0, ...sizes.map((size) => size.width)),
@@ -61,19 +68,32 @@ export const generateHTMLPreview = async (
   };
 };
 
-const isEmbeddedVector = (node: SceneNode, settings: HTMLSettings): boolean =>
-  settings.embedVectors && !!(node as AltNode<SceneNode>).canBeFlattened;
-
-const getRootBounds = (node: SceneNode, settings: HTMLSettings) => {
-  // Exported SVGs already contain the node's rotation.
-  if (isEmbeddedVector(node, settings) && node.absoluteBoundingBox) {
-    return { ...node.absoluteBoundingBox, x: 0, y: 0 };
-  }
-  return getRotatedBounds(
+const getRootBounds = (node: SceneNode) => {
+  const bounds = getTransformedBounds(
     node.width,
     node.height,
-    "rotation" in node ? -node.rotation : 0,
+    getLinearTransform(node as AltNode<SceneNode>),
   );
+  // Keep effects outside the geometry visible when a root is selected alone.
+  const render =
+    "absoluteRenderBounds" in node ? node.absoluteRenderBounds : null;
+  if (!render || !node.absoluteTransform) return bounds;
+  const x = Math.min(bounds.x, render.x - node.absoluteTransform[0][2]);
+  const y = Math.min(bounds.y, render.y - node.absoluteTransform[1][2]);
+  return {
+    x,
+    y,
+    width:
+      Math.max(
+        bounds.x + bounds.width,
+        render.x + render.width - node.absoluteTransform[0][2],
+      ) - x,
+    height:
+      Math.max(
+        bounds.y + bounds.height,
+        render.y + render.height - node.absoluteTransform[1][2],
+      ) - y,
+  };
 };
 
 const htmlWidgetGenerator = async (
@@ -83,15 +103,25 @@ const htmlWidgetGenerator = async (
   // filter non visible nodes. This is necessary at this step because conversion already happened.
   const promiseOfConvertedCode = getVisibleNodes(sceneNode).map(
     async (node) => {
+      // Cache on the actual converted node before creating a root preview copy.
+      // SVG Assets and the second HTML/preview pass reuse the same export.
       if (
-        !node.parent &&
-        "rotation" in node &&
-        node.rotation &&
-        !isEmbeddedVector(node, settings)
+        settings.embedVectors &&
+        (node as AltNode<SceneNode>).canBeFlattened &&
+        !(node as any).isMask
       ) {
-        // Give a selected rotated root its own viewport so its intrinsic size is
-        // preserved and negative rotated corners remain visible in the preview.
-        const bounds = getRootBounds(node, settings);
+        await renderAndAttachSVG(node);
+      }
+      const bounds = !node.parent ? getRootBounds(node) : null;
+      if (
+        bounds &&
+        (htmlRotation(node as AltNode<SceneNode>).length > 0 ||
+          bounds.x !== 0 ||
+          bounds.y !== 0 ||
+          bounds.width !== node.width ||
+          bounds.height !== node.height)
+      ) {
+        // Preserve intrinsic dimensions while fitting all transformed corners.
         const content = await convertNode(settings)({
           ...node,
           x: -bounds.x,
@@ -123,8 +153,8 @@ const convertNode = (settings: HTMLSettings) => async (node: SceneNode) => {
 
   // Embed SVGs only when the user explicitly enables it.
   if (settings.embedVectors && (node as any).canBeFlattened) {
-    const altNode = await renderAndAttachSVG(node);
-    if (altNode.svg) {
+    const altNode = node as AltNode<SceneNode>;
+    if (altNode.svg && altNode.svgGeometry) {
       return htmlWrapSVG(altNode, settings);
     }
   }
@@ -168,15 +198,43 @@ const htmlWrapSVG = (
 ): string => {
   if (node.svg === "") return "";
 
-  const builder = new HtmlDefaultBuilder(node, settings)
+  if (!node.svgGeometry) return "";
+
+  // The SVG viewport is absolutely positioned; reserve the node's layout box
+  // even for HUG icons. FILL still participates in its parent's flex layout.
+  const layoutNode = {
+    ...node,
+    layoutSizingHorizontal:
+      "layoutSizingHorizontal" in node && node.layoutSizingHorizontal === "FILL"
+        ? "FILL"
+        : "FIXED",
+    layoutSizingVertical:
+      "layoutSizingVertical" in node && node.layoutSizingVertical === "FILL"
+        ? "FILL"
+        : "FIXED",
+  } as AltNode<SceneNode>;
+
+  const builder = new HtmlDefaultBuilder(layoutNode, settings)
     .addData("svg-wrapper")
+    .size()
     .position();
+  if (!commonIsAbsolutePosition(node)) builder.addStyles("position: relative");
+  builder.addStyles(...htmlRotation(node), "overflow: visible");
 
   // The SVG content already has the var() references, so we don't need
   // to add inline CSS variables in most cases. The browser will use the fallbacks
   // if the variables aren't defined in the CSS.
 
-  return `\n<div${builder.build()}>\n${indentString(node.svg ?? "")}</div>`;
+  const viewportStyle = formatStyleAttribute([
+    "position: absolute",
+    "left: 0",
+    "top: 0",
+    "transform-origin: top left",
+    formatCSS("transform", cssMatrix(node.svgGeometry.viewportToLocal)),
+    formatCSS("width", node.svgGeometry.viewport.width),
+    formatCSS("height", node.svgGeometry.viewport.height),
+  ]);
+  return `\n<div${builder.build()}>\n${indentString(`<div${viewportStyle}>${svgForHTML(node.svg ?? "", node.svgGeometry)}</div>`)}\n</div>`;
 };
 
 const htmlGroup = async (

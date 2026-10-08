@@ -11,4 +11,6 @@ export type AltNode = Node & {
   height: number;
   x: number;
   y: number;
+  absoluteTransform: Transform;
+  localTransform: Transform;
 };

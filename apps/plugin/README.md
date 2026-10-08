@@ -26,7 +26,17 @@ pnpm -C apps/plugin test
 ```
 
 The regression tests cover HTML text and attribute escaping, rotated node dimensions,
-nested frame/group coordinates, and preview bounds using a mocked Figma API.
+nested frame/group coordinates, reflections and affine transforms, SVG viewport
+compensation, preview bounds, and text/button sizing using a mocked Figma API.
+
+SVG exports request `contentsOnly: true` and `useAbsoluteBounds: true` so placement
+uses a geometry-based export rectangle. The inline SVG viewport is normalized to
+its viewBox size and mapped back to node-local coordinates before the normal HTML
+parent transforms apply. Render bounds expand standalone previews for effects;
+they are not substituted for the SVG export origin. SVG Assets retains the original
+export string. Browser tests with synthetic SVG exports cover transform composition;
+actual Figma exports with strokes, shadows, and clipping still require visual checks.
+
 
 ## Notes
 
