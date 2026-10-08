@@ -21,5 +21,6 @@ pnpm -C apps/plugin build:main
 
 ## Notes
 
-- This fork is **HTML-only** (including JSX/Svelte/styled-components modes).
-- Framework tabs and Email UI have been removed from the plugin UI.
+- Both the plugin window and Dev Mode generate **HTML with inline CSS**.
+- Export settings cover layer names, CSS color variables, embedded images, and SVGs.
+- Saved settings from earlier versions are filtered to the supported HTML options when loaded.

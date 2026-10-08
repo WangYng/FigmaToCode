@@ -5,13 +5,13 @@ type Option = {
   label: string;
 };
 
-interface FrameworkTabsProps {
+interface OptionTabsProps {
   options: Option[];
   selectedValue: string;
   onChange: (value: string) => void;
 }
 
-const FrameworkTabs: React.FC<FrameworkTabsProps> = ({
+const OptionTabs: React.FC<OptionTabsProps> = ({
   options,
   selectedValue,
   onChange,
@@ -40,4 +40,4 @@ const FrameworkTabs: React.FC<FrameworkTabsProps> = ({
   );
 };
 
-export default FrameworkTabs;
+export default OptionTabs;

@@ -1,5 +1,3 @@
-import { indentStringFlutter } from "./indentString";
-
 // this is necessary to avoid a height of 4.999999523162842.
 export const numberToFixedString = (num: number): string => {
   return num.toFixed(2).replace(/\.00$/, "");
@@ -38,47 +36,6 @@ export const propertyIfNotDefault = (
     return "";
   }
   return propertyValue;
-};
-
-export const generateWidgetCode = (
-  className: string,
-  properties: Record<string, number | string | string[]>,
-  positionedValues?: string[],
-): string => {
-  console.log("properties", properties);
-  const propertiesArray = Object.entries(properties)
-    .filter(([, value]) => {
-      if (Array.isArray(value)) {
-        return value.length > 0;
-      }
-      return value !== "";
-    })
-    .map(([key, value]) => {
-      if (Array.isArray(value)) {
-        return `${key}: [\n${indentStringFlutter(value.join(",\n"))},\n],`;
-      } else {
-        return `${key}: ${
-          typeof value === "number" ? numberToFixedString(value) : value
-        },`;
-      }
-    });
-
-  const positionedValuesString = (positionedValues || [])
-    .map((value) => {
-      return typeof value === "number" ? numberToFixedString(value) : value;
-    })
-    .join(", ");
-
-  const compactPropertiesArray = propertiesArray.join(" ");
-  if (compactPropertiesArray.length < 40 && !positionedValues) {
-    return `${className}(${compactPropertiesArray.slice(0, -1)})`;
-  }
-
-  const joined = `${positionedValuesString}${
-    positionedValuesString ? ",\n" : ""
-  }${propertiesArray.join("\n")}`;
-
-  return `${className}(\n${indentStringFlutter(joined.trim())}\n)`;
 };
 
 function escapeRegExp(string: string) {

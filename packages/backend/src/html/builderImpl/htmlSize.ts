@@ -1,15 +1,14 @@
 import { nodeSize } from "../../common/nodeWidthHeight";
-import { formatWithJSX } from "../../common/parseJSX";
+import { formatCSS } from "../../common/formatCSS";
 import { isPreviewGlobal } from "../htmlMain";
 
 export const htmlSizePartial = (
   node: SceneNode,
-  isJsx: boolean,
 ): { width: string; height: string; constraints: string[] } => {
   if (isPreviewGlobal && node.parent === undefined) {
     return {
-      width: formatWithJSX("width", isJsx, "100%"),
-      height: formatWithJSX("height", isJsx, "100%"),
+      width: formatCSS("width", "100%"),
+      height: formatCSS("height", "100%"),
       constraints: [],
     };
   }
@@ -19,38 +18,38 @@ export const htmlSizePartial = (
 
   let w = "";
   if (typeof size.width === "number") {
-    w = formatWithJSX("width", isJsx, size.width);
+    w = formatCSS("width", size.width);
   } else if (size.width === "fill") {
     if (
       nodeParent &&
       "layoutMode" in nodeParent &&
       nodeParent.layoutMode === "HORIZONTAL"
     ) {
-      w = formatWithJSX("flex", isJsx, "1 1 0");
+      w = formatCSS("flex", "1 1 0");
     } else {
       if (node.maxWidth) {
-        w = formatWithJSX("width", isJsx, "100%");
+        w = formatCSS("width", "100%");
       } else {
-        w = formatWithJSX("align-self", isJsx, "stretch");
+        w = formatCSS("align-self", "stretch");
       }
     }
   }
 
   let h = "";
   if (typeof size.height === "number") {
-    h = formatWithJSX("height", isJsx, size.height);
+    h = formatCSS("height", size.height);
   } else if (typeof size.height === "string") {
     if (
       nodeParent &&
       "layoutMode" in nodeParent &&
       nodeParent.layoutMode === "VERTICAL"
     ) {
-      h = formatWithJSX("flex", isJsx, "1 1 0");
+      h = formatCSS("flex", "1 1 0");
     } else {
       if (node.maxHeight) {
-        h = formatWithJSX("height", isJsx, "100%");
+        h = formatCSS("height", "100%");
       } else {
-        h = formatWithJSX("align-self", isJsx, "stretch");
+        h = formatCSS("align-self", "stretch");
       }
     }
   }
@@ -59,19 +58,19 @@ export const htmlSizePartial = (
   const constraints = [];
 
   if (node.maxWidth !== undefined && node.maxWidth !== null) {
-    constraints.push(formatWithJSX("max-width", isJsx, node.maxWidth));
+    constraints.push(formatCSS("max-width", node.maxWidth));
   }
 
   if (node.minWidth !== undefined && node.minWidth !== null) {
-    constraints.push(formatWithJSX("min-width", isJsx, node.minWidth));
+    constraints.push(formatCSS("min-width", node.minWidth));
   }
 
   if (node.maxHeight !== undefined && node.maxHeight !== null) {
-    constraints.push(formatWithJSX("max-height", isJsx, node.maxHeight));
+    constraints.push(formatCSS("max-height", node.maxHeight));
   }
 
   if (node.minHeight !== undefined && node.minHeight !== null) {
-    constraints.push(formatWithJSX("min-height", isJsx, node.minHeight));
+    constraints.push(formatCSS("min-height", node.minHeight));
   }
 
   // Return constraints separately instead of appending to width/height

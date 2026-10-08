@@ -5,16 +5,12 @@ import {
 } from "../../html/builderImpl/htmlColor";
 import { cssVariableName } from "../variableToColorName";
 import { calculateContrastRatio } from "./commonUI";
-import {
-  LinearGradientConversion,
-  SolidColorConversion,
-  Framework,
-} from "types";
+import { LinearGradientConversion, SolidColorConversion } from "types";
 import { processColorVariables } from "../../altNodes/jsonNodeConversion";
 
-export const retrieveGenericSolidUIColors = async (
-  framework: Framework,
-): Promise<Array<SolidColorConversion>> => {
+export const retrieveGenericSolidUIColors = async (): Promise<
+  Array<SolidColorConversion>
+> => {
   const selectionColors = figma.getSelectionColors();
   if (!selectionColors || selectionColors.paints.length === 0) return [];
 
@@ -26,7 +22,7 @@ export const retrieveGenericSolidUIColors = async (
       const paint = { ...d } as Paint;
       await processColorVariables(paint as any);
 
-      const fill = await convertSolidColor(paint, framework);
+      const fill = await convertSolidColor(paint);
       if (fill) {
         const exists = colors.find(
           (col) => col.exportValue === fill.exportValue,
@@ -43,7 +39,6 @@ export const retrieveGenericSolidUIColors = async (
 
 const convertSolidColor = async (
   fill: Paint,
-  framework: Framework,
 ): Promise<SolidColorConversion | null> => {
   const black = { r: 0, g: 0, b: 0 };
   const white = { r: 1, g: 1, b: 1 };
@@ -59,16 +54,14 @@ const convertSolidColor = async (
     contrastWhite: calculateContrastRatio(fill.color, white),
   };
 
-  // HTML-only mode: always format exports as HTML/CSS.
-  // (We keep the signature for backwards compatibility with the UI.)
   output.exportValue = htmlColorFromFill(fill as any);
 
   return output;
 };
 
-export const retrieveGenericLinearGradients = async (
-  framework: Framework,
-): Promise<Array<LinearGradientConversion>> => {
+export const retrieveGenericLinearGradients = async (): Promise<
+  Array<LinearGradientConversion>
+> => {
   const selectionColors = figma.getSelectionColors();
   const colorStr: Array<LinearGradientConversion> = [];
 
@@ -108,7 +101,6 @@ export const retrieveGenericLinearGradients = async (
         }
 
         let exportValue = "";
-        // HTML-only mode: always format exports as HTML/CSS.
         exportValue = htmlGradientFromFills(fill);
         colorStr.push({
           cssPreview: htmlGradientFromFills(fill),

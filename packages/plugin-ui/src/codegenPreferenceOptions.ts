@@ -7,16 +7,13 @@ export const preferenceOptions: LocalCodegenPreferenceOptions[] = [
     label: "Layer names",
     description: "Include Figma layer names in classes.",
     isDefault: true,
-    includedLanguages: ["HTML"],
   },
   {
     itemType: "individual_select",
     propertyName: "useColorVariables",
     label: "Color Variables",
-    description:
-      "Export code using Figma variables as colors. Example: 'bg-background' instead of 'bg-white'.",
+    description: "Export colors as CSS variables with fallback values.",
     isDefault: true,
-    includedLanguages: ["HTML"],
   },
   {
     itemType: "individual_select",
@@ -25,7 +22,6 @@ export const preferenceOptions: LocalCodegenPreferenceOptions[] = [
     description:
       "Convert Figma images to Base64 and embed them in the code. This may be slow. If there are too many images, it could freeze Figma.",
     isDefault: false,
-    includedLanguages: ["HTML"],
   },
   {
     itemType: "individual_select",
@@ -34,23 +30,10 @@ export const preferenceOptions: LocalCodegenPreferenceOptions[] = [
     description:
       "Enable this to convert vector shapes to SVGs and embed them in the design. This can be a slow operation. If unchecked, shapes will be converted into rectangles.",
     isDefault: true,
-    includedLanguages: ["HTML"],
   },
 ];
 
 export const selectPreferenceOptions: SelectPreferenceOptions[] = [
-  {
-    itemType: "select",
-    propertyName: "htmlGenerationMode",
-    label: "Mode",
-    options: [
-      { label: "HTML", value: "html" },
-      { label: "React (JSX)", value: "jsx" },
-      { label: "Svelte", value: "svelte" },
-      { label: "styled-components", value: "styled-components" },
-    ],
-    includedLanguages: ["HTML"],
-  },
   {
     itemType: "select",
     propertyName: "embedVectorsMaxSize",
@@ -61,6 +44,5 @@ export const selectPreferenceOptions: SelectPreferenceOptions[] = [
       { label: "256", value: "256" },
       { label: "512", value: "512" },
     ],
-    includedLanguages: ["HTML"],
   },
 ];

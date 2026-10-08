@@ -375,7 +375,6 @@ function adjustChildrenOrder(node: any) {
 
 /**
  * Recursively process both JSON node and Figma node to update with data not available in JSON
- * This now includes the functionality from convertNodeToAltNode
  * @param jsonNode The JSON node to process
  * @param figmaNode The corresponding Figma node
  * @param settings Plugin settings
@@ -401,7 +400,7 @@ const processNodePair = async (
   if (!jsonNode.id) return null;
   if (jsonNode.visible === false) return null;
 
-  // Handle node type-specific conversions (from convertNodeToAltNode)
+  // Handle node type-specific conversions.
   const nodeType = jsonNode.type;
 
   // Store the cumulative rotation (parent's cumulative + node's own)

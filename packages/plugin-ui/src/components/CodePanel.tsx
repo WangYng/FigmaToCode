@@ -9,7 +9,7 @@ import { coldarkDark as theme } from "react-syntax-highlighter/dist/esm/styles/p
 import { CopyButton } from "./CopyButton";
 import EmptyState from "./EmptyState";
 import SettingsGroup from "./SettingsGroup";
-import FrameworkTabs from "./FrameworkTabs";
+import OptionTabs from "./OptionTabs";
 
 interface CodePanelProps {
   code: string;
@@ -62,41 +62,6 @@ const CodePanel = (props: CodePanelProps) => {
   const handleButtonHover = () => setSyntaxHovered(true);
   const handleButtonLeave = () => setSyntaxHovered(false);
 
-  // Memoized preference groups for better performance
-  const {
-    essentialPreferences,
-    stylingPreferences,
-    selectableSettingsFiltered,
-  } = useMemo(() => {
-    // HTML-only mode: show only preferences that apply to HTML (or global ones).
-    const frameworkPreferences = preferenceOptions.filter((preference) => {
-      const langs = preference.includedLanguages;
-      return !langs || langs.includes("HTML");
-    });
-
-    // Define preference grouping based on property names
-    const essentialPropertyNames = ["jsx"];
-    const stylingPropertyNames = [
-      "useColorVariables",
-      "showLayerNames",
-      "embedImages",
-      "embedVectors",
-    ];
-
-    // Group preferences by category
-    return {
-      essentialPreferences: frameworkPreferences.filter((p) =>
-        essentialPropertyNames.includes(p.propertyName),
-      ),
-      stylingPreferences: frameworkPreferences.filter((p) =>
-        stylingPropertyNames.includes(p.propertyName),
-      ),
-      selectableSettingsFiltered: selectPreferenceOptions.filter((p) =>
-        !p.includedLanguages || p.includedLanguages.includes("HTML"),
-      ),
-    };
-  }, [preferenceOptions, selectPreferenceOptions]);
-
   return (
     <div className="w-full flex flex-col gap-2 mt-2">
       <div className="flex items-center justify-between w-full">
@@ -118,29 +83,20 @@ const CodePanel = (props: CodePanelProps) => {
 
       {!isCodeEmpty && (
         <div className="flex flex-col p-3 bg-card border rounded-lg text-sm">
-          {/* Essential settings always shown */}
-          <SettingsGroup
-            title=""
-            settings={essentialPreferences}
-            alwaysExpanded={true}
-            selectedSettings={settings}
-            onPreferenceChanged={onPreferenceChanged}
-          />
-
-          {/* Framework-specific options */}
-          {selectableSettingsFiltered.length > 0 && (
+          {/* HTML export options */}
+          {selectPreferenceOptions.length > 0 && (
             <div className="mt-1 mb-2 last:mb-0">
               <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
                 HTML Options
               </p>
-              {selectableSettingsFiltered.map((preference) => {
+              {selectPreferenceOptions.map((preference) => {
                 // Regular toggle buttons for other options
                 return (
                   <div key={preference.propertyName} className="mt-2">
                     <p className="text-xs text-muted-foreground mb-1">
                       {preference.label}
                     </p>
-                    <FrameworkTabs
+                    <OptionTabs
                       options={preference.options}
                       selectedValue={String(
                         settings?.[preference.propertyName] ??
@@ -167,10 +123,10 @@ const CodePanel = (props: CodePanelProps) => {
           )}
 
           {/* Styling preferences */}
-          {stylingPreferences.length > 0 && (
+          {preferenceOptions.length > 0 && (
             <SettingsGroup
               title="Styling Options"
-              settings={stylingPreferences}
+              settings={preferenceOptions}
               alwaysExpanded={true}
               selectedSettings={settings}
               onPreferenceChanged={onPreferenceChanged}
@@ -189,11 +145,7 @@ const CodePanel = (props: CodePanelProps) => {
         ) : (
           <>
             <SyntaxHighlighter
-              language={
-                settings?.htmlGenerationMode === "styled-components"
-                  ? "jsx"
-                  : "html"
-              }
+              language="html"
               style={theme}
               customStyle={{
                 fontSize: 12,

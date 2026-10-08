@@ -1,4 +1,4 @@
-import { formatMultipleJSX, formatWithJSX, escapeJSXText } from "../common/parseJSX";
+import { formatCSSDeclarations, formatCSS } from "../common/formatCSS";
 import { HtmlDefaultBuilder } from "./htmlDefaultBuilder";
 import { htmlColorFromFills } from "./builderImpl/htmlColor";
 import {
@@ -6,29 +6,15 @@ import {
   commonLineHeight,
 } from "../common/commonTextHeightSpacing";
 import { HTMLSettings, StyledTextSegmentSubset } from "types";
-import {
-  cssCollection,
-  generateUniqueClassName,
-  stylesToCSS,
-  getComponentName,
-} from "./htmlMain";
-
 export class HtmlTextBuilder extends HtmlDefaultBuilder {
   constructor(node: TextNode, settings: HTMLSettings) {
     super(node, settings);
-  }
-
-  // Override htmlElement to ensure text nodes use paragraph elements
-  get htmlElement(): string {
-    return "p";
   }
 
   getTextSegments(node: TextNode): {
     style: string;
     text: string;
     openTypeFeatures: { [key: string]: boolean };
-    className?: string;
-    componentName?: string;
   }[] {
     const segments = (node as any)
       .styledTextSegments as StyledTextSegmentSubset[];
@@ -36,7 +22,7 @@ export class HtmlTextBuilder extends HtmlDefaultBuilder {
       return [];
     }
 
-    return segments.map((segment, index) => {
+    return segments.map((segment) => {
       // Prepare additional CSS properties from layer blur and drop shadow effects.
       const additionalStyles: { [key: string]: string } = {};
 
@@ -49,79 +35,29 @@ export class HtmlTextBuilder extends HtmlDefaultBuilder {
         additionalStyles["text-shadow"] = textShadowStyle;
       }
 
-      const styleAttributes = formatMultipleJSX(
-        {
-          color: htmlColorFromFills(segment.fills as any),
-          "font-size": segment.fontSize,
-          "font-family": segment.fontName.family,
-          "font-style": this.getFontStyle(segment.fontName.style),
-          "font-weight": `${segment.fontWeight}`,
-          "text-decoration": this.textDecoration(segment.textDecoration),
-          "text-transform": this.textTransform(segment.textCase),
-          "line-height": this.lineHeight(segment.lineHeight, segment.fontSize),
-          "letter-spacing": this.letterSpacing(
-            segment.letterSpacing,
-            segment.fontSize,
-          ),
-          // "text-indent": segment.indentation,
-          "word-wrap": "break-word",
-          ...additionalStyles,
-        },
-        this.isJSX,
-      );
+      const styleAttributes = formatCSSDeclarations({
+        color: htmlColorFromFills(segment.fills as any),
+        "font-size": segment.fontSize,
+        "font-family": segment.fontName.family,
+        "font-style": this.getFontStyle(segment.fontName.style),
+        "font-weight": `${segment.fontWeight}`,
+        "text-decoration": this.textDecoration(segment.textDecoration),
+        "text-transform": this.textTransform(segment.textCase),
+        "line-height": this.lineHeight(segment.lineHeight, segment.fontSize),
+        "letter-spacing": this.letterSpacing(
+          segment.letterSpacing,
+          segment.fontSize,
+        ),
+        // "text-indent": segment.indentation,
+        "word-wrap": "break-word",
+        ...additionalStyles,
+      });
 
-      let chars = segment.characters;
-      if (this.needsJSXTextEscaping) {
-        chars = escapeJSXText(chars);
-      }
-      const charsWithLineBreak = chars.split("\n").join("<br/>");
-      const result: any = {
+      const result = {
         style: styleAttributes,
-        text: charsWithLineBreak,
+        text: segment.characters.split("\n").join("<br/>"),
         openTypeFeatures: segment.openTypeFeatures,
       };
-
-      // Add class name and component name for Svelte or styled-components modes
-      const mode = this.settings.htmlGenerationMode;
-      if (
-        (mode === "svelte" || mode === "styled-components") &&
-        styleAttributes
-      ) {
-        // Use the pre-assigned uniqueId from the segment if available,
-        // or generate one if not (as a fallback)
-        const segmentName =
-          (segment as any).uniqueId ||
-          `${((node as any).uniqueName || node.name || "text").replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase()}_text_${(index + 1).toString().padStart(2, "0")}`;
-
-        const className = generateUniqueClassName(segmentName);
-        result.className = className;
-
-        // Convert styles to CSS format
-        const cssStyles = stylesToCSS(
-          styleAttributes
-            .split(this.isJSX ? "," : ";")
-            .map((style) => style.trim())
-            .filter((style) => style),
-          this.isJSX,
-        );
-
-        // In both modes, use span for text segments to avoid selector conflicts
-        const elementTag = "span";
-
-        const componentName = getComponentName(segmentName, className, elementTag);
-
-        // Store in cssCollection with consistent metadata
-        cssCollection[className] = {
-          styles: cssStyles,
-          nodeType: "TEXT",
-          element: elementTag,
-          componentName: componentName,
-        };
-
-        if (mode === "styled-components") {
-          result.componentName = componentName;
-        }
-      }
 
       return result;
     });
@@ -130,17 +66,15 @@ export class HtmlTextBuilder extends HtmlDefaultBuilder {
   fontSize(node: TextNode, isUI = false): this {
     if (node.fontSize !== figma.mixed) {
       const value = isUI ? Math.min(node.fontSize, 24) : node.fontSize;
-      this.addStyles(formatWithJSX("font-size", this.isJSX, value));
+      this.addStyles(formatCSS("font-size", value));
     }
     return this;
   }
 
   textTrim(): this {
     if ("leadingTrim" in this.node && this.node.leadingTrim === "CAP_HEIGHT") {
-      this.addStyles(formatWithJSX("text-box-trim", this.isJSX, "trim-both"));
-      this.addStyles(
-        formatWithJSX("text-box-edge", this.isJSX, "cap alphabetic"),
-      );
+      this.addStyles(formatCSS("text-box-trim", "trim-both"));
+      this.addStyles(formatCSS("text-box-edge", "cap alphabetic"));
     }
     return this;
   }
@@ -188,11 +122,6 @@ export class HtmlTextBuilder extends HtmlDefaultBuilder {
     return null;
   }
 
-  /**
-   * https://tailwindcss.com/docs/font-style/
-   * example: font-extrabold
-   * example: italic
-   */
   getFontStyle(style: string): string {
     if (style.toLowerCase().match("italic")) {
       return "italic";
@@ -219,7 +148,7 @@ export class HtmlTextBuilder extends HtmlDefaultBuilder {
           textAlign = "justify";
           break;
       }
-      this.addStyles(formatWithJSX("text-align", this.isJSX, textAlign));
+      this.addStyles(formatCSS("text-align", textAlign));
     }
     return this;
   }
@@ -237,11 +166,9 @@ export class HtmlTextBuilder extends HtmlDefaultBuilder {
           break;
       }
       if (alignItems) {
-        this.addStyles(
-          formatWithJSX("justify-content", this.isJSX, alignItems),
-        );
-        this.addStyles(formatWithJSX("display", this.isJSX, "flex"));
-        this.addStyles(formatWithJSX("flex-direction", this.isJSX, "column"));
+        this.addStyles(formatCSS("justify-content", alignItems));
+        this.addStyles(formatCSS("display", "flex"));
+        this.addStyles(formatCSS("flex-direction", "column"));
       }
     }
     return this;

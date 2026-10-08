@@ -1,4 +1,4 @@
-import { formatWithJSX } from "../common/parseJSX";
+import { formatCSS } from "../common/formatCSS";
 import { htmlShadow } from "./builderImpl/htmlShadow";
 import {
   htmlVisibility,
@@ -28,61 +28,14 @@ import {
   formatStyleAttribute,
 } from "../common/commonFormatAttributes";
 import { HTMLSettings } from "types";
-import {
-  cssCollection,
-  generateUniqueClassName,
-  stylesToCSS,
-  getComponentName,
-} from "./htmlMain";
-
 export class HtmlDefaultBuilder {
   styles: Array<string>;
   data: Array<string>;
   node: SceneNode;
   settings: HTMLSettings;
-  cssClassName: string | null = null;
 
   get name() {
-    if (this.settings.htmlGenerationMode === "styled-components") {
-      return this.settings.showLayerNames
-        ? (this.node as any).uniqueName || this.node.name
-        : "";
-    }
     return this.settings.showLayerNames ? this.node.name : "";
-  }
-
-  get visible() {
-    return this.node.visible;
-  }
-
-  get isJSX() {
-    return this.settings.htmlGenerationMode === "jsx";
-  }
-
-  get exportCSS() {
-    return this.settings.htmlGenerationMode === "svelte";
-  }
-
-  get needsJSXTextEscaping() {
-    const mode = this.settings.htmlGenerationMode;
-    return mode === "jsx" || mode === "styled-components" || mode === "svelte";
-  }
-
-  get useStyledComponents() {
-    return this.settings.htmlGenerationMode === "styled-components";
-  }
-
-  get useInlineStyles() {
-    return (
-      this.settings.htmlGenerationMode === "html" ||
-      this.settings.htmlGenerationMode === "jsx"
-    );
-  }
-
-  // Get the appropriate HTML element based on node type
-  get htmlElement(): string {
-    if (this.node.type === "TEXT") return "p";
-    return "div";
   }
 
   constructor(node: SceneNode, settings: HTMLSettings) {
@@ -90,32 +43,6 @@ export class HtmlDefaultBuilder {
     this.settings = settings;
     this.styles = [];
     this.data = [];
-
-    // For both Svelte and styled-components, use sequential class names
-    if (
-      this.settings.htmlGenerationMode === "svelte" ||
-      this.settings.htmlGenerationMode === "styled-components"
-    ) {
-      // Use uniqueName (which already has _01, _02 suffixes) if available
-      let baseClassName =
-        (this.node as any).uniqueName ||
-        this.node.name ||
-        this.node.type.toLowerCase();
-
-      // Clean the name and create a valid CSS class name
-      baseClassName = baseClassName
-        .replace(/[^a-zA-Z0-9\s_-]/g, "")
-        .replace(/\s+/g, "-")
-        .toLowerCase();
-
-      // Make sure it's valid
-      if (!/^[a-z]/i.test(baseClassName)) {
-        baseClassName = `${this.node.type.toLowerCase()}-${baseClassName}`;
-      }
-
-      // Generate unique class name with simple counter suffix
-      this.cssClassName = generateUniqueClassName(baseClassName);
-    }
   }
 
   commonPositionStyles(): this {
@@ -134,7 +61,7 @@ export class HtmlDefaultBuilder {
       );
     }
     this.shadow();
-    this.border(this.settings);
+    this.border();
     this.blur();
     return this;
   }
@@ -144,19 +71,19 @@ export class HtmlDefaultBuilder {
   };
 
   blend(): this {
-    const { node, isJSX } = this;
+    const { node } = this;
     this.addStyles(
-      htmlVisibility(node, isJSX),
-      ...htmlRotation(node as LayoutMixin, isJSX),
-      htmlOpacity(node as MinimalBlendMixin, isJSX),
-      htmlBlendMode(node as MinimalBlendMixin, isJSX),
+      htmlVisibility(node),
+      ...htmlRotation(node as LayoutMixin),
+      htmlOpacity(node as MinimalBlendMixin),
+      htmlBlendMode(node as MinimalBlendMixin),
     );
     return this;
   }
 
-  border(settings: HTMLSettings): this {
+  border(): this {
     const { node } = this;
-    this.addStyles(...htmlBorderRadius(node, this.isJSX));
+    this.addStyles(...htmlBorderRadius(node));
 
     const commonBorder = commonStroke(node);
     if (!commonBorder) {
@@ -192,68 +119,43 @@ export class HtmlDefaultBuilder {
         node.type === "INSTANCE" ||
         node.type === "COMPONENT"
       ) {
-        this.addStyles(
-          formatWithJSX("outline", this.isJSX, consolidateBorders(weight)),
-        );
+        this.addStyles(formatCSS("outline", consolidateBorders(weight)));
         if (strokeAlign === "CENTER") {
           this.addStyles(
-            formatWithJSX(
+            formatCSS(
               "outline-offset",
-              this.isJSX,
               `${numberToFixedString(-weight / 2)}px`,
             ),
           );
         } else if (strokeAlign === "INSIDE") {
           this.addStyles(
-            formatWithJSX(
-              "outline-offset",
-              this.isJSX,
-              `${numberToFixedString(-weight)}px`,
-            ),
+            formatCSS("outline-offset", `${numberToFixedString(-weight)}px`),
           );
         }
       } else {
         // Default: use regular border on autolayout + strokeAlign: inside
-        this.addStyles(
-          formatWithJSX("border", this.isJSX, consolidateBorders(weight)),
-        );
+        this.addStyles(formatCSS("border", consolidateBorders(weight)));
       }
     } else {
       // For non-uniform borders, always use individual border properties
       if (commonBorder.left !== 0) {
         this.addStyles(
-          formatWithJSX(
-            "border-left",
-            this.isJSX,
-            consolidateBorders(commonBorder.left),
-          ),
+          formatCSS("border-left", consolidateBorders(commonBorder.left)),
         );
       }
       if (commonBorder.top !== 0) {
         this.addStyles(
-          formatWithJSX(
-            "border-top",
-            this.isJSX,
-            consolidateBorders(commonBorder.top),
-          ),
+          formatCSS("border-top", consolidateBorders(commonBorder.top)),
         );
       }
       if (commonBorder.right !== 0) {
         this.addStyles(
-          formatWithJSX(
-            "border-right",
-            this.isJSX,
-            consolidateBorders(commonBorder.right),
-          ),
+          formatCSS("border-right", consolidateBorders(commonBorder.right)),
         );
       }
       if (commonBorder.bottom !== 0) {
         this.addStyles(
-          formatWithJSX(
-            "border-bottom",
-            this.isJSX,
-            consolidateBorders(commonBorder.bottom),
-          ),
+          formatCSS("border-bottom", consolidateBorders(commonBorder.bottom)),
         );
       }
     }
@@ -261,22 +163,24 @@ export class HtmlDefaultBuilder {
   }
 
   position(): this {
-    const { node, isJSX } = this;
+    const { node } = this;
     const isAbsolutePosition = commonIsAbsolutePosition(node);
     if (isAbsolutePosition) {
-      const { x, y } = getCommonPositionValue(node, this.settings);
+      const { x, y } = getCommonPositionValue(node);
 
       this.addStyles(
-        formatWithJSX("left", isJSX, x),
-        formatWithJSX("top", isJSX, y),
-        formatWithJSX("position", isJSX, "absolute"),
+        formatCSS("left", x),
+        formatCSS("top", y),
+        formatCSS("position", "absolute"),
       );
-      
+
       // Set z-index for absolute positioned elements based on their order
       // Background layers (earlier in list) should have lower z-index
       const parent = node.parent;
       if (parent && "children" in parent && parent.children.length > 0) {
-        const visibleChildren = parent.children.filter((child) => child.visible !== false);
+        const visibleChildren = parent.children.filter(
+          (child) => child.visible !== false,
+        );
         // Find the index of this node in the visible children array
         let nodeIndex = -1;
         for (let i = 0; i < visibleChildren.length; i++) {
@@ -289,14 +193,17 @@ export class HtmlDefaultBuilder {
         // First element gets z-index: 0, subsequent elements get incrementing z-index
         if (nodeIndex >= 0) {
           const zIndexValue = nodeIndex.toString();
-          this.addStyles(formatWithJSX("z-index", isJSX, zIndexValue));
+          this.addStyles(formatCSS("z-index", zIndexValue));
         }
       }
     } else {
       // Check if parent has absolute positioned children
       const parent = node.parent;
-      const parentHasAbsoluteChildren = parent && "children" in parent && this.hasAbsolutePositionedChildren(parent as SceneNode);
-      
+      const parentHasAbsoluteChildren =
+        parent &&
+        "children" in parent &&
+        this.hasAbsolutePositionedChildren(parent as SceneNode);
+
       // Check if this node should be relative positioned
       const shouldBeRelative =
         node.type === "GROUP" ||
@@ -305,13 +212,13 @@ export class HtmlDefaultBuilder {
         parentHasAbsoluteChildren;
 
       if (shouldBeRelative) {
-        this.addStyles(formatWithJSX("position", isJSX, "relative"));
-        
+        this.addStyles(formatCSS("position", "relative"));
+
         // If parent has absolute positioned children, MUST set z-index to participate in stacking context
         // This ensures non-absolute children (content layers) appear above absolute children (background layers)
         // Both position: relative and z-index: 1 are required together
         if (parentHasAbsoluteChildren) {
-          this.addStyles(formatWithJSX("z-index", isJSX, "1"));
+          this.addStyles(formatCSS("z-index", "1"));
         }
       }
     }
@@ -327,7 +234,10 @@ export class HtmlDefaultBuilder {
 
     return node.children.some((child) => {
       // Check if child has explicit absolute positioning
-      if ("layoutPositioning" in child && child.layoutPositioning === "ABSOLUTE") {
+      if (
+        "layoutPositioning" in child &&
+        child.layoutPositioning === "ABSOLUTE"
+      ) {
         return true;
       }
       // Check if child would be absolutely positioned based on parent layout
@@ -343,27 +253,19 @@ export class HtmlDefaultBuilder {
     property: "text" | "background",
   ): this {
     if (property === "text") {
-      this.addStyles(
-        formatWithJSX(
-          "text",
-          this.isJSX,
-          htmlColorFromFills(paintArray as any),
-        ),
-      );
+      this.addStyles(formatCSS("text", htmlColorFromFills(paintArray as any)));
       return this;
     }
 
     const backgroundValues = buildBackgroundValues(paintArray as any);
     if (backgroundValues) {
-      this.addStyles(formatWithJSX("background", this.isJSX, backgroundValues));
+      this.addStyles(formatCSS("background", backgroundValues));
 
       // Add blend mode property if multiple fills exist with different blend modes
       if (paintArray !== figma.mixed) {
         const blendModes = this.buildBackgroundBlendModes(paintArray);
         if (blendModes) {
-          this.addStyles(
-            formatWithJSX("background-blend-mode", this.isJSX, blendModes),
-          );
+          this.addStyles(formatCSS("background-blend-mode", blendModes));
         }
       }
     }
@@ -394,22 +296,19 @@ export class HtmlDefaultBuilder {
   }
 
   shadow(): this {
-    const { node, isJSX } = this;
+    const { node } = this;
     if ("effects" in node) {
       const shadow = htmlShadow(node);
       if (shadow) {
-        this.addStyles(formatWithJSX("box-shadow", isJSX, htmlShadow(node)));
+        this.addStyles(formatCSS("box-shadow", htmlShadow(node)));
       }
     }
     return this;
   }
 
   size(): this {
-    const { node, settings } = this;
-    const { width, height, constraints } = htmlSizePartial(
-      node,
-      settings.htmlGenerationMode === "jsx",
-    );
+    const { node } = this;
+    const { width, height, constraints } = htmlSizePartial(node);
 
     if (node.type === "TEXT") {
       switch (node.textAutoResize) {
@@ -436,9 +335,9 @@ export class HtmlDefaultBuilder {
   }
 
   autoLayoutPadding(): this {
-    const { node, isJSX } = this;
+    const { node } = this;
     if ("paddingLeft" in node) {
-      this.addStyles(...htmlPadding(node, isJSX));
+      this.addStyles(...htmlPadding(node));
     }
     return this;
   }
@@ -451,9 +350,8 @@ export class HtmlDefaultBuilder {
       );
       if (blur) {
         this.addStyles(
-          formatWithJSX(
+          formatCSS(
             "filter",
-            this.isJSX,
             `blur(${numberToFixedString(blur.radius / 2)}px)`,
           ),
         );
@@ -464,9 +362,8 @@ export class HtmlDefaultBuilder {
       );
       if (backgroundBlur) {
         this.addStyles(
-          formatWithJSX(
+          formatCSS(
             "backdrop-filter",
-            this.isJSX,
             `blur(${numberToFixedString(backgroundBlur.radius / 2)}px)`,
           ),
         );
@@ -482,115 +379,30 @@ export class HtmlDefaultBuilder {
 
   build(additionalStyle: Array<string> = []): string {
     this.addStyles(...additionalStyle);
-
-    // Different handling based on generation mode
-    const mode = this.settings.htmlGenerationMode || "html";
-
-    // Early return for styled-components with no other attributes
-    if (
-      mode === "styled-components" &&
-      !this.data.length &&
-      this.styles.length > 0 &&
-      this.cssClassName
-    ) {
-      this.storeStyles();
-      return ""; // Return empty string as we're using the component directly
-    }
-
-    let classNames: string[] = [];
+    const classNames: string[] = [];
     if (this.name) {
       this.addData("layer", this.name.trim());
-
-      if (mode !== "svelte" && mode !== "styled-components") {
-        const layerNameClass = stringToClassName(this.name.trim());
-        if (layerNameClass !== "") {
-          classNames.push(layerNameClass);
-        }
-      }
+      const layerNameClass = stringToClassName(this.name.trim());
+      if (layerNameClass !== "") classNames.push(layerNameClass);
     }
 
     if ("componentProperties" in this.node && this.node.componentProperties) {
       Object.entries(this.node.componentProperties)
-        ?.map((prop) => {
-          if (prop[1].type === "VARIANT" || prop[1].type === "BOOLEAN") {
-            const cleanName = prop[0]
+        .map(([name, property]) => {
+          if (property.type === "VARIANT" || property.type === "BOOLEAN") {
+            const cleanName = name
               .split("#")[0]
               .replace(/\s+/g, "-")
               .toLowerCase();
-
-            return formatDataAttribute(cleanName, String(prop[1].value));
+            return formatDataAttribute(cleanName, String(property.value));
           }
           return "";
         })
         .filter(Boolean)
         .sort()
-        .forEach((d) => this.data.push(d));
+        .forEach((attribute) => this.data.push(attribute));
     }
 
-    // For Svelte mode, we use classes
-    if (mode === "svelte" && this.styles.length > 0 && this.cssClassName) {
-      classNames.push(this.cssClassName);
-      this.storeStyles();
-      this.styles = []; // Clear inline styles for Svelte
-    }
-    // For styled-components, we need the class but keep styles for the component
-    else if (
-      mode === "styled-components" &&
-      this.styles.length > 0 &&
-      this.cssClassName
-    ) {
-      classNames.push(this.cssClassName);
-      this.storeStyles();
-      // Keep styles for styled-components
-    }
-
-    const dataAttributes = this.data.join("");
-
-    // Class attributes
-    const classAttribute =
-      mode === "styled-components"
-        ? formatClassAttribute(
-            classNames.filter((c) => c !== this.cssClassName),
-            this.isJSX,
-          )
-        : formatClassAttribute(classNames, this.isJSX);
-
-    // Style attribute
-    const styleAttribute = formatStyleAttribute(this.styles, this.isJSX);
-
-    return `${dataAttributes}${classAttribute}${styleAttribute}`;
-  }
-
-  // Extract style storage into a method to avoid duplication
-  private storeStyles(): void {
-    if (!this.cssClassName || this.styles.length === 0) return;
-
-    // Convert to CSS format if needed
-    const cssStyles = stylesToCSS(this.styles, this.isJSX);
-
-    // Both modes use the standard div/span elements, no need for semantic HTML inference
-    // which causes conflicts with duplicate tag selectors
-    let element = this.node.type === "TEXT" ? "p" : "div";
-
-    // Only override for really obvious cases
-    if ((this.node as any).name?.toLowerCase().includes("button")) {
-      element = "button";
-    } else if (
-      (this.node as any).name?.toLowerCase().includes("img") ||
-      (this.node as any).name?.toLowerCase().includes("image")
-    ) {
-      element = "img";
-    }
-
-    const nodeName = (this.node as any).uniqueName || this.node.name;
-
-    const componentName = getComponentName(nodeName, this.cssClassName, element);
-
-    cssCollection[this.cssClassName] = {
-      styles: cssStyles,
-      nodeType: this.node.type,
-      element: element,
-      componentName: componentName,
-    };
+    return `${this.data.join("")}${formatClassAttribute(classNames)}${formatStyleAttribute(this.styles)}`;
   }
 }

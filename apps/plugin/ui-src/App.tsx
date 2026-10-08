@@ -184,7 +184,9 @@ export default function App() {
           const totalChunks =
             typeof msg.totalChunks === "number" ? msg.totalChunks : 0;
           const size =
-            msg.size && typeof msg.size.width === "number" && typeof msg.size.height === "number"
+            msg.size &&
+            typeof msg.size.width === "number" &&
+            typeof msg.size.height === "number"
               ? msg.size
               : { width: 0, height: 0 };
           chunkedPreviewRef.current = {
@@ -236,7 +238,7 @@ export default function App() {
           break;
         }
 
-        case "pluginSettingChanged":
+        case "pluginSettingsChanged":
           const settingsMessage = untypedMessage as SettingsChangedMessage;
           setState((prevState) => ({
             ...prevState,
@@ -283,7 +285,6 @@ export default function App() {
             const firstName =
               payload?.json?.[0]?.name ??
               payload?.newConversion?.[0]?.name ??
-              payload?.oldConversion?.[0]?.name ??
               "selection";
             const filename = `figma-node-${sanitizeFilePart(String(firstName))}.json`;
 

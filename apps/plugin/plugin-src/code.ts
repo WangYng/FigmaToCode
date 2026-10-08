@@ -1,40 +1,21 @@
-import {
-  htmlMain,
-  run,
-  postSettingsChanged,
-} from "backend";
+import { htmlMain, run, postSettingsChanged } from "backend";
 import { nodesToJSON } from "backend/src/altNodes/jsonNodeConversion";
 import { PluginSettings, SettingWillChangeMessage } from "types";
 
 let userPluginSettings: PluginSettings;
 
 export const defaultPluginSettings: PluginSettings = {
-  framework: "HTML",
   showLayerNames: true,
-  useOldPluginVersion2025: false,
   responsiveRoot: false,
-  flutterGenerationMode: "snippet",
-  swiftUIGenerationMode: "snippet",
-  composeGenerationMode: "snippet",
-  roundTailwindValues: true,
-  roundTailwindColors: true,
   useColorVariables: true,
-  customTailwindPrefix: "",
   embedImages: false,
   embedVectors: true,
   embedVectorsMaxSize: 64,
-  htmlGenerationMode: "html",
-  tailwindGenerationMode: "jsx",
-  baseFontSize: 16,
-  useTailwind4: false,
-  thresholdPercent: 15,
-  baseFontFamily: "",
-  fontFamilyCustomConfig: {},
 };
 
 // A helper type guard to ensure the key belongs to the PluginSettings type
 function isKeyOfPluginSettings(key: string): key is keyof PluginSettings {
-  return key in defaultPluginSettings;
+  return Object.prototype.hasOwnProperty.call(defaultPluginSettings, key);
 }
 
 const getUserSettings = async () => {
@@ -62,6 +43,8 @@ const getUserSettings = async () => {
   };
 
   userPluginSettings = updatedPluginSrcSettings as PluginSettings;
+  // Persist only supported settings when upgrading from an earlier version.
+  await figma.clientStorage.setAsync("userPluginSettings", userPluginSettings);
   console.log("[DEBUG] getUserSettings - Final settings:", userPluginSettings);
   return userPluginSettings;
 };
@@ -69,8 +52,6 @@ const getUserSettings = async () => {
 const initSettings = async () => {
   console.log("[DEBUG] initSettings - Initializing plugin settings");
   await getUserSettings();
-  // HTML-only mode
-  userPluginSettings.framework = "HTML";
   postSettingsChanged(userPluginSettings);
   console.log("[DEBUG] initSettings - Calling safeRun with settings");
   safeRun(userPluginSettings);
@@ -150,16 +131,14 @@ const standardMode = async () => {
     if (msg.type === "pluginSettingWillChange") {
       const { key, value } = msg as SettingWillChangeMessage<unknown>;
       console.log(`[DEBUG] Setting changed: ${key} = ${value}`);
-      if (key === "framework") {
-        // HTML-only mode: ignore framework changes
-        (userPluginSettings as any).framework = "HTML";
-        figma.clientStorage.setAsync("userPluginSettings", userPluginSettings);
-        postSettingsChanged(userPluginSettings);
-        safeRun(userPluginSettings);
+      if (
+        !isKeyOfPluginSettings(key) ||
+        typeof value !== typeof defaultPluginSettings[key]
+      )
         return;
-      }
       (userPluginSettings as any)[key] = value;
       figma.clientStorage.setAsync("userPluginSettings", userPluginSettings);
+      postSettingsChanged(userPluginSettings);
       safeRun(userPluginSettings);
     } else if (msg.type === "get-selection-json") {
       console.log("[DEBUG] get-selection-json message received");
@@ -174,7 +153,6 @@ const standardMode = async () => {
       }
       const result: {
         json?: SceneNode[];
-        oldConversion?: any;
         newConversion?: any;
       } = {};
 
@@ -229,11 +207,8 @@ const codegenMode = async () => {
 
   figma.codegen.on(
     "generate",
-    async ({ language, node }: CodegenEvent): Promise<CodegenResult[]> => {
-      console.log(
-        `[DEBUG] codegen.generate - Language: ${language}, Node:`,
-        node,
-      );
+    async ({ node }: CodegenEvent): Promise<CodegenResult[]> => {
+      console.log("[DEBUG] codegen.generate - Node:", node);
 
       const convertedSelection = await nodesToJSON([node], userPluginSettings);
       console.log(
@@ -241,22 +216,8 @@ const codegenMode = async () => {
         convertedSelection,
       );
 
-      // HTML-only mode: support only HTML flavors in Codegen.
-      const htmlMode =
-        language === "html_jsx"
-          ? "jsx"
-          : language === "html_svelte"
-            ? "svelte"
-            : language === "html_styled_components"
-              ? "styled-components"
-              : "html";
-
       const html = (
-        await htmlMain(
-          convertedSelection as any,
-          { ...userPluginSettings, htmlGenerationMode: htmlMode },
-          true,
-        )
+        await htmlMain(convertedSelection as any, userPluginSettings, true)
       ).html;
 
       return [

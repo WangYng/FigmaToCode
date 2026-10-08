@@ -1,5 +1,4 @@
-import { HTMLSettings } from "types";
-import { formatMultipleJSXArray } from "../../common/parseJSX";
+import { formatCSSArray } from "../../common/formatCSS";
 
 const getFlexDirection = (node: InferredAutoLayoutResult): string =>
   node.layoutMode === "HORIZONTAL" ? "" : "column";
@@ -70,17 +69,13 @@ const getFlex = (
 
 export const htmlAutoLayoutProps = (
   node: SceneNode & InferredAutoLayoutResult,
-  settings: HTMLSettings,
 ): string[] =>
-  formatMultipleJSXArray(
-    {
-      "flex-direction": getFlexDirection(node),
-      "justify-content": getJustifyContent(node),
-      "align-items": getAlignItems(node),
-      gap: getGap(node),
-      display: getFlex(node, node),
-      "flex-wrap": getFlexWrap(node),
-      "align-content": getAlignContent(node),
-    },
-    settings.htmlGenerationMode === "jsx",
-  );
+  formatCSSArray({
+    "flex-direction": getFlexDirection(node),
+    "justify-content": getJustifyContent(node),
+    "align-items": getAlignItems(node),
+    gap: getGap(node),
+    display: getFlex(node, node),
+    "flex-wrap": getFlexWrap(node),
+    "align-content": getAlignContent(node),
+  });

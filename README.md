@@ -13,7 +13,7 @@
 <a href="https://www.figma.com/community/plugin/842128343887142055"><img src="assets/badge.png" height="60"/></a>
 </p>
 
-Converting Figma designs into usable code can be a challenge, often requiring time-consuming manual work. Figma to Code simplifies that process. This plugin generates responsive layouts in **HTML** (including `React (JSX)`, `Svelte`, and `styled-components` modes) directly from your designs. Your feedback and ideas are always welcome.
+Converting Figma designs into usable code can be a challenge, often requiring time-consuming manual work. Figma to Code simplifies that process. This plugin generates responsive layouts in **HTML with inline CSS** directly from your designs. Your feedback and ideas are always welcome.
 
 ![Gif showing the conversion](assets/lossy_gif.gif)
 
@@ -27,7 +27,7 @@ The plugin uses a sophisticated multi-step process to transform your Figma desig
 
 3. **Layout Optimization**: The plugin analyzes and optimizes layouts, detecting patterns like auto-layouts, responsive constraints and color variables.
 
-4. **Code Generation**: Finally, the optimized structure is transformed into the target framework's code, with special handling for each framework's unique patterns and best practices. If a feature is unsupported, the plugin will provide a warning.
+4. **Code Generation**: Finally, the optimized structure is transformed into HTML elements and inline CSS. If a feature is unsupported, the plugin will provide a warning.
 
 ![Conversion Workflow](assets/workflow.png)
 
@@ -41,7 +41,7 @@ Converting visual designs to code inevitably encounters complex edge cases. Here
 
 2. **Color Variables**: The plugin detects and processes color variables, allowing for theme-consistent output.
 
-3. **Gradients and Effects**: Different frameworks handle gradients and effects in unique ways, requiring specialized conversion logic.
+3. **Gradients and Effects**: Figma gradients and effects are converted into CSS gradients, shadows, and filters.
 
 ![Conversion Workflow](assets/examples.png)
 

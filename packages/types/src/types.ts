@@ -1,44 +1,13 @@
 import "@figma/plugin-typings";
 // Settings
-export type Framework = "Flutter" | "SwiftUI" | "HTML" | "Tailwind" | "Compose";
 export interface HTMLSettings {
   showLayerNames: boolean;
   embedImages: boolean;
   embedVectors: boolean;
   embedVectorsMaxSize: number;
   useColorVariables: boolean;
-  htmlGenerationMode: "html" | "jsx" | "styled-components" | "svelte";
 }
-export interface TailwindSettings extends HTMLSettings {
-  tailwindGenerationMode: "html" | "jsx" | "twig";
-  roundTailwindValues: boolean;
-  roundTailwindColors: boolean;
-  useColorVariables: boolean;
-  customTailwindPrefix?: string;
-  embedVectors: boolean;
-  baseFontSize: number;
-  useTailwind4: boolean;
-  thresholdPercent: number;
-  baseFontFamily: string;
-  fontFamilyCustomConfig: Record<string, string[]>
-}
-export interface FlutterSettings {
-  flutterGenerationMode: "fullApp" | "stateless" | "snippet";
-}
-export interface SwiftUISettings {
-  swiftUIGenerationMode: "preview" | "struct" | "snippet";
-}
-export interface ComposeSettings {
-  composeGenerationMode: "snippet" | "composable" | "screen";
-}
-export interface PluginSettings
-  extends HTMLSettings,
-    TailwindSettings,
-    FlutterSettings,
-    SwiftUISettings,
-    ComposeSettings {
-  framework: Framework;
-  useOldPluginVersion2025: boolean;
+export interface PluginSettings extends HTMLSettings {
   responsiveRoot: boolean;
 }
 // Messaging
@@ -80,15 +49,12 @@ export type ErrorMessage = Message & {
 };
 
 // Nodes
-export type ParentNode = BaseNode & ChildrenMixin;
-
-export type AltNodeMetadata<T extends BaseNode> = {
-  originalNode: T;
+export type AltNodeMetadata = {
   canBeFlattened: boolean;
   svg?: string;
   base64?: string;
 };
-export type AltNode<T extends BaseNode> = T & AltNodeMetadata<T>;
+export type AltNode<T extends BaseNode> = T & AltNodeMetadata;
 
 export type ExportableNode = SceneNode & ExportMixin & MinimalFillsMixin;
 
@@ -182,27 +148,12 @@ export type LinearGradientConversion = {
   exportValue: string;
 };
 
-// Framework Specific
+// Preview
 
 export interface HTMLPreview {
   size: { width: number; height: number };
   content: string;
 }
-
-export interface TailwindTextConversion {
-  name: string;
-  attr: string;
-  full: string;
-  style: string;
-  contrastBlack: number;
-}
-
-export type TailwindColorType = "text" | "bg" | "border" | "outline";
-
-export type SwiftUIModifier = [
-  string,
-  string | SwiftUIModifier | SwiftUIModifier[],
-];
 
 // UI
 
@@ -210,20 +161,16 @@ export interface PreferenceOptions {
   itemType: string;
   label: string;
   propertyName: string;
-  includedLanguages?: Framework[];
 }
 export interface SelectPreferenceOptions extends PreferenceOptions {
   itemType: "select";
-  propertyName: Exclude<keyof PluginSettings, "framework">;
+  propertyName: keyof PluginSettings;
   options: { label: string; value: string; isDefault?: boolean }[];
 }
 
 export interface LocalCodegenPreferenceOptions extends PreferenceOptions {
   itemType: "individual_select";
-  propertyName: Exclude<
-    keyof PluginSettings,
-    "framework" | "flutterGenerationMode" | "swiftUIGenerationMode"
-  >;
+  propertyName: keyof PluginSettings;
   description: string;
   value?: boolean;
   isDefault?: boolean;

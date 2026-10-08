@@ -1,7 +1,7 @@
 import { getCommonRadius } from "../../common/commonRadius";
-import { formatWithJSX } from "../../common/parseJSX";
+import { formatCSS } from "../../common/formatCSS";
 
-export const htmlBorderRadius = (node: SceneNode, isJsx: boolean): string[] => {
+export const htmlBorderRadius = (node: SceneNode): string[] => {
   let comp: string[] = [];
 
   if (
@@ -10,11 +10,11 @@ export const htmlBorderRadius = (node: SceneNode, isJsx: boolean): string[] => {
     "clipsContent" in node &&
     node.clipsContent === true
   ) {
-    comp.push(formatWithJSX("overflow", isJsx, "hidden"));
+    comp.push(formatCSS("overflow", "hidden"));
   }
 
   if (node.type === "ELLIPSE") {
-    comp.push(formatWithJSX("border-radius", isJsx, 9999));
+    comp.push(formatCSS("border-radius", 9999));
     return comp;
   }
 
@@ -27,7 +27,7 @@ export const htmlBorderRadius = (node: SceneNode, isJsx: boolean): string[] => {
       return comp;
     }
     singleCorner = radius.all;
-    comp.push(formatWithJSX("border-radius", isJsx, radius.all));
+    comp.push(formatCSS("border-radius", radius.all));
   } else {
     const cornerValues = [
       radius.topLeft,
@@ -47,7 +47,7 @@ export const htmlBorderRadius = (node: SceneNode, isJsx: boolean): string[] => {
     // Add CSS properties for non-zero corner values
     for (let i = 0; i < 4; i++) {
       if (cornerValues[i] > 0) {
-        comp.push(formatWithJSX(cornerProperties[i], isJsx, cornerValues[i]));
+        comp.push(formatCSS(cornerProperties[i], cornerValues[i]));
       }
     }
   }

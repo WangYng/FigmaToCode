@@ -2,11 +2,7 @@ import {
   retrieveGenericLinearGradients,
   retrieveGenericSolidUIColors,
 } from "./common/retrieveUI/retrieveColors";
-import {
-  addWarning,
-  clearWarnings,
-  warnings,
-} from "./common/commonConversionWarnings";
+import { clearWarnings, warnings } from "./common/commonConversionWarnings";
 import {
   postCodeChunk,
   postCodeChunkEnd,
@@ -20,7 +16,6 @@ import {
 import { PluginSettings } from "types";
 import { convertToCode } from "./common/retrieveUI/convertToCode";
 import { generateHTMLPreview } from "./html/htmlMain";
-import { oldConvertNodesToAltNodes } from "./altNodes/oldAltConversion";
 import {
   getNodeByIdAsyncCalls,
   getNodeByIdAsyncTime,
@@ -36,7 +31,6 @@ export const run = async (settings: PluginSettings) => {
   resetPerformanceCounters();
   clearWarnings();
 
-  const { framework, useOldPluginVersion2025 } = settings;
   const selection = figma.currentPage.selection;
 
   if (selection.length === 0) {
@@ -47,30 +41,9 @@ export const run = async (settings: PluginSettings) => {
   // Timing with Date.now() instead of console.time
   const nodeToJSONStart = Date.now();
 
-  let convertedSelection: any;
-  if (useOldPluginVersion2025) {
-    convertedSelection = oldConvertNodesToAltNodes(selection, null);
-    console.log("convertedSelection", convertedSelection);
-  } else {
-    convertedSelection = await nodesToJSON(selection, settings);
-    console.log(`[benchmark] nodesToJSON: ${Date.now() - nodeToJSONStart}ms`);
-    console.log("nodeJson", convertedSelection);
-    // const removeParentRecursive = (obj: any): any => {
-    //   if (Array.isArray(obj)) {
-    //     return obj.map(removeParentRecursive);
-    //   }
-    //   if (obj && typeof obj === 'object') {
-    //     const newObj = { ...obj };
-    //     delete newObj.parent;
-    //     for (const key in newObj) {
-    //       newObj[key] = removeParentRecursive(newObj[key]);
-    //     }
-    //     return newObj;
-    //   }
-    //   return obj;
-    // };
-    // console.log("nodeJson without parent refs:", removeParentRecursive(convertedSelection));
-  }
+  const convertedSelection: any = await nodesToJSON(selection, settings);
+  console.log(`[benchmark] nodesToJSON: ${Date.now() - nodeToJSONStart}ms`);
+  console.log("nodeJson", convertedSelection);
 
   console.log("[debug] convertedSelection", { ...convertedSelection[0] });
 
@@ -93,16 +66,13 @@ export const run = async (settings: PluginSettings) => {
   }
 
   const convertToCodeStart = Date.now();
-  // Keep the generated code consistent with what the preview renders:
-  // always generate plain HTML (no JSX/Svelte/styled-components) in this HTML-only fork.
-  const htmlOnlySettings = { ...settings, htmlGenerationMode: "html" as const };
-  let code = await convertToCode(convertedSelection, htmlOnlySettings);
+  const code = await convertToCode(convertedSelection, settings);
   console.log(
     `[benchmark] convertToCode: ${Date.now() - convertToCodeStart}ms`,
   );
 
   const generatePreviewStart = Date.now();
-  let htmlPreview = await generateHTMLPreview(convertedSelection, htmlOnlySettings);
+  const htmlPreview = await generateHTMLPreview(convertedSelection, settings);
   console.log(
     `[benchmark] generateHTMLPreview: ${Date.now() - generatePreviewStart}ms`,
   );
@@ -113,8 +83,8 @@ export const run = async (settings: PluginSettings) => {
   const previewChunked = htmlPreview.content.length > MAX_STRING_LENGTH;
 
   const colorPanelStart = Date.now();
-  const colors = await retrieveGenericSolidUIColors(framework);
-  const gradients = await retrieveGenericLinearGradients(framework);
+  const colors = await retrieveGenericSolidUIColors();
+  const gradients = await retrieveGenericLinearGradients();
   console.log(
     `[benchmark] color and gradient panel: ${Date.now() - colorPanelStart}ms`,
   );
@@ -170,7 +140,8 @@ export const run = async (settings: PluginSettings) => {
     postCodeChunkEnd();
 
     if (previewChunked) {
-      const previewTotalChunks = Math.ceil(htmlPreview.content.length / CHUNK_SIZE) || 1;
+      const previewTotalChunks =
+        Math.ceil(htmlPreview.content.length / CHUNK_SIZE) || 1;
       postPreviewChunkStart(previewTotalChunks, htmlPreview.size);
       for (let i = 0; i < previewTotalChunks; i++) {
         const start = i * CHUNK_SIZE;
