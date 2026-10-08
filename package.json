@@ -3,9 +3,9 @@
   "private": true,
   "packageManager": "pnpm@9.14.4",
   "scripts": {
-    "build": "turbo run build",
-    "build:watch": "turbo run build:watch",
-    "dev": "turbo run dev --concurrency 20",
+    "build": "turbo run build --filter=plugin",
+    "build:watch": "turbo run build:watch --filter=plugin",
+    "dev": "turbo run dev --filter=plugin",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,css,md}\""
   },

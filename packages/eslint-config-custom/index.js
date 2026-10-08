@@ -1,11 +1,15 @@
 module.exports = {
-  extends: ["next", "turbo", "prettier"],
-  rules: {
-    "@next/next/no-html-link-for-pages": "off",
-  },
+  extends: [
+    "plugin:react/recommended",
+    "plugin:react/jsx-runtime",
+    "turbo",
+    "prettier",
+  ],
+  parser: require.resolve("@typescript-eslint/parser"),
   parserOptions: {
-    babelOptions: {
-      presets: [require.resolve("next/babel")],
-    },
+    ecmaVersion: 2021,
+    sourceType: "module",
+    ecmaFeatures: { jsx: true },
   },
+  settings: { react: { version: "detect" } },
 };

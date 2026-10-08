@@ -71,7 +71,6 @@ The plugin is organized as a monorepo. There are several packages:
 - `apps/plugin` - This is the actual plugin assembled from the parts in `backend` & `plugin-ui`. Within this folder it's divided between:
   - `plugin-src` - loads from `backend` and compiles to `code.js`
   - `ui-src` - loads the common `plugin-ui` and compiles to `index.html`
-- `apps/debug` - This is a debug mode plugin that is a more convenient way to see all the UI elements.
 
 ### Development Workflow
 
@@ -79,24 +78,20 @@ The project uses [Turborepo](https://turborepo.com/) for managing the monorepo, 
 
 #### Running the Project
 
-You have two main options for development:
+From the repository root, run:
 
-1. **Root development mode** (includes debug UI):
+```bash
+pnpm dev
+```
 
-   ```bash
-   pnpm dev
-   ```
+This watches and rebuilds the plugin main thread and UI. In Figma, import the
+root `manifest.json` as a development plugin, then open it on a selected design.
 
-   This runs the plugin in dev mode and also starts a Next.js server for the debug UI. You can access the debug UI at `http://localhost:3000`.
+To run the same watchers from the plugin package:
 
-2. **Plugin-only development mode**:
-
-   ```bash
-   cd apps/plugin
-   pnpm dev
-   ```
-
-   This focuses only on the plugin without the Next.js debug UI. Use this when you're making changes specifically to the plugin.
+```bash
+pnpm -C apps/plugin dev
+```
 
 #### Where to Make Changes
 
@@ -117,12 +112,6 @@ You'll rarely need to modify files directly in the `apps/` directory, as they mo
 - `build:watch` - builds and watches for changes
 - `lint` - runs ESLint
 - `format` - formats with prettier (warning: may edit files!)
-
-#### Debug mode
-
-When running the `dev` task, you can open `http://localhost:3000` to see the debug version of the UI.
-
-<img width="600" alt="Screenshot 2024-12-13 at 16 26 43" src="https://github.com/user-attachments/assets/427fb066-70e1-47bd-8718-51f7f4d83e35" />
 
 ## Issues
 
