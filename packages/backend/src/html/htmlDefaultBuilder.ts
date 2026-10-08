@@ -313,6 +313,8 @@ export class HtmlDefaultBuilder {
     if (node.type === "TEXT") {
       switch (node.textAutoResize) {
         case "WIDTH_AND_HEIGHT":
+          // Auto-width text keeps its natural line width, even in a narrow flex row.
+          this.addStyles("white-space: nowrap", "flex-shrink: 0");
           break;
         case "HEIGHT":
           this.addStyles(width);

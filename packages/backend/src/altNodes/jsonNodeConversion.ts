@@ -612,18 +612,23 @@ const processNodePair = async (
     jsonNode.counterAxisAlignItems = "MIN";
   }
 
-  // If layout sizing is HUG but there are no children, set it to FIXED
-  const hasChildren =
-    "children" in jsonNode &&
-    jsonNode.children &&
-    Array.isArray(jsonNode.children) &&
-    jsonNode.children.length > 0;
+  // Empty layout containers need explicit dimensions. Text hugs its content
+  // without children, so preserve its sizing. Use the live type because empty
+  // frames may already have been converted to rectangles above.
+  const isEmptyContainer =
+    ["FRAME", "COMPONENT", "COMPONENT_SET", "INSTANCE", "GROUP"].includes(
+      figmaNode.type,
+    ) &&
+    "children" in figmaNode &&
+    !("children" in jsonNode && jsonNode.children?.length);
 
-  if (jsonNode.layoutSizingHorizontal === "HUG" && !hasChildren) {
-    jsonNode.layoutSizingHorizontal = "FIXED";
-  }
-  if (jsonNode.layoutSizingVertical === "HUG" && !hasChildren) {
-    jsonNode.layoutSizingVertical = "FIXED";
+  if (isEmptyContainer) {
+    if (jsonNode.layoutSizingHorizontal === "HUG") {
+      jsonNode.layoutSizingHorizontal = "FIXED";
+    }
+    if (jsonNode.layoutSizingVertical === "HUG") {
+      jsonNode.layoutSizingVertical = "FIXED";
+    }
   }
 
   // Process children recursively if both have children

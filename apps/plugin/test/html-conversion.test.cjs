@@ -196,6 +196,73 @@ test("rich text preserves sub/sup styling without allowing text or attribute inj
   assert.match(html, /<sub style="[^"]*">&amp;copy;<\/sub>/);
 });
 
+test("auto-width Chinese text preserves HUG and cannot wrap or shrink in a narrow flex row", async () => {
+  const api = runtime();
+  const label = textNode([segment("保持自然宽度"), segment("\n手动换行")], {
+    textAutoResize: "WIDTH_AND_HEIGHT",
+    layoutSizingHorizontal: "HUG",
+    layoutSizingVertical: "HUG",
+  });
+  const row = liveNode({
+    type: "FRAME",
+    width: 24,
+    layoutMode: "HORIZONTAL",
+    layoutWrap: "NO_WRAP",
+    children: [label],
+  });
+  const nodes = await api.nodesToJSON([row], settings);
+  assert.equal(nodes[0].children[0].layoutSizingHorizontal, "HUG");
+  assert.equal(nodes[0].children[0].layoutSizingVertical, "HUG");
+  for (const output of [
+    (await api.htmlMain(nodes, settings)).html,
+    (await api.generateHTMLPreview(nodes, settings)).content,
+  ]) {
+    assert.match(output, /white-space: nowrap/);
+    assert.match(output, /flex-shrink: 0/);
+    assert.ok(output.includes("<br/>手动换行"));
+  }
+});
+
+test("fixed-width auto-height text still wraps inside a NO_WRAP container", async () => {
+  const api = runtime();
+  const paragraph = textNode([segment("固定宽度的正文仍然允许换行")], {
+    width: 48,
+    textAutoResize: "HEIGHT",
+    layoutSizingHorizontal: "FIXED",
+    layoutSizingVertical: "HUG",
+  });
+  const row = liveNode({
+    type: "FRAME",
+    layoutMode: "HORIZONTAL",
+    layoutWrap: "NO_WRAP",
+    children: [paragraph],
+  });
+  const nodes = await api.nodesToJSON([row], settings);
+  assert.equal(nodes[0].children[0].layoutSizingVertical, "HUG");
+  for (const output of [
+    (await api.htmlMain(nodes, settings)).html,
+    (await api.generateHTMLPreview(nodes, settings)).content,
+  ]) {
+    assert.match(output, /width: 48px/);
+    assert.doesNotMatch(output, /white-space: nowrap|flex-shrink: 0/);
+  }
+});
+
+test("empty layout containers still receive fixed dimensions", async () => {
+  const api = runtime();
+  const frame = liveNode({
+    type: "FRAME",
+    children: [],
+    layoutSizingHorizontal: "HUG",
+    layoutSizingVertical: "HUG",
+  });
+  const [node] = await api.nodesToJSON([frame], settings);
+  assert.equal(node.layoutSizingHorizontal, "FIXED");
+  assert.equal(node.layoutSizingVertical, "FIXED");
+  const { html } = await api.htmlMain([node], settings);
+  assert.match(html, /width: 100px; height: 50px/);
+});
+
 test("native dimensions survive critical, negative and fractional rotation angles", async () => {
   const api = runtime();
   for (const angle of [
