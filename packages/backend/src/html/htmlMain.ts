@@ -194,10 +194,25 @@ const htmlWrapSVG = (
 
   if (!node.svgGeometry) return "";
 
+  const transformStyles = htmlRotation(node);
+  const absolute = commonIsAbsolutePosition(node);
+  const parentLayout =
+    node.parent && "layoutMode" in node.parent
+      ? node.parent.layoutMode
+      : "NONE";
+  const layoutBounds =
+    !absolute &&
+    (parentLayout === "HORIZONTAL" || parentLayout === "VERTICAL") &&
+    transformStyles.length > 0
+      ? getTransformedBounds(node.width, node.height, getLinearTransform(node))
+      : null;
+
   // The SVG viewport is absolutely positioned; reserve the node's layout box
   // even for HUG icons. FILL still participates in its parent's flex layout.
   const layoutNode = {
     ...node,
+    width: layoutBounds?.width ?? node.width,
+    height: layoutBounds?.height ?? node.height,
     layoutSizingHorizontal:
       "layoutSizingHorizontal" in node && node.layoutSizingHorizontal === "FILL"
         ? "FILL"
@@ -206,14 +221,23 @@ const htmlWrapSVG = (
       "layoutSizingVertical" in node && node.layoutSizingVertical === "FILL"
         ? "FILL"
         : "FIXED",
-  } as AltNode<SceneNode>;
+  } as AltNode<SceneNode> &
+    Pick<FrameNode, "layoutSizingHorizontal" | "layoutSizingVertical">;
 
   const builder = new HtmlDefaultBuilder(layoutNode, settings)
     .addData("svg-wrapper")
     .size()
     .position();
-  if (!commonIsAbsolutePosition(node)) builder.addStyles("position: relative");
-  builder.addStyles(...htmlRotation(node), "overflow: visible");
+  if (!absolute) builder.addStyles("position: relative");
+  if (!layoutBounds) builder.addStyles(...transformStyles);
+  else if (
+    parentLayout === "HORIZONTAL"
+      ? layoutNode.layoutSizingHorizontal !== "FILL"
+      : layoutNode.layoutSizingVertical !== "FILL"
+  ) {
+    builder.addStyles("flex-shrink: 0");
+  }
+  builder.addStyles("overflow: visible");
 
   // The SVG content already has the var() references, so we don't need
   // to add inline CSS variables in most cases. The browser will use the fallbacks
@@ -228,7 +252,21 @@ const htmlWrapSVG = (
     formatCSS("width", node.svgGeometry.viewport.width),
     formatCSS("height", node.svgGeometry.viewport.height),
   ]);
-  return `\n<div${builder.build()}>\n${indentString(`<div${viewportStyle}>${svgForHTML(node.svg ?? "", node.svgGeometry)}</div>`)}\n</div>`;
+  let content = `<div${viewportStyle}>${svgForHTML(node.svg ?? "", node.svgGeometry)}</div>`;
+  if (layoutBounds) {
+    // Flex positions the visual bounding box; the intrinsic node and its SVG
+    // compensation remain inside it. Absolute nodes already have local left/top.
+    const intrinsicStyle = formatStyleAttribute([
+      "position: absolute",
+      formatCSS("left", -layoutBounds.x),
+      formatCSS("top", -layoutBounds.y),
+      formatCSS("width", node.width),
+      formatCSS("height", node.height),
+      ...transformStyles,
+    ]);
+    content = `<div data-svg-transform${intrinsicStyle}>${content}</div>`;
+  }
+  return `\n<div${builder.build()}>\n${indentString(content)}\n</div>`;
 };
 
 const htmlGroup = async (

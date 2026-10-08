@@ -754,9 +754,11 @@ test("SVG icons in Auto Layout reserve their box and keep compensation out of fl
     embedVectors: true,
   });
   const style = html.match(/data-layer="Eye"[^>]*style="([^"]*)"/)[1];
-  assert.match(style, /width: 12.40px; height: 8.60px/);
+  assert.match(style, /width: 14.59px; height: 12.32px/);
   assert.match(style, /position: relative/);
   assert.doesNotMatch(style, /position: absolute|left:|top:/);
+  assert.doesNotMatch(style, /transform:/);
+  assert.match(html, /data-svg-transform/);
   assert.match(
     html,
     /position: absolute; left: 0; top: 0; transform-origin: top left/,
@@ -1308,4 +1310,103 @@ test("normal padding and padding exactly equal to the fixed width are preserved"
       new RegExp(`padding-left: ${padding}px; padding-right: ${padding}px`),
     );
   }
+});
+
+async function rotatedIconLayout({
+  angle = -90,
+  mode = "HORIZONTAL",
+  absolute = false,
+  fill = false,
+  mirror = false,
+} = {}) {
+  const api = runtime();
+  const parent = liveNode({
+    type: "FRAME",
+    name: "Layout",
+    width: 100,
+    height: 100,
+    layoutMode: mode,
+  });
+  const matrix = mirror
+    ? [
+        [-1, 0, 10],
+        [0, 1, 20],
+      ]
+    : rotation(angle, 10, 20);
+  const icon = {
+    ...liveNode({ type: "VECTOR", name: "Icon", width: 20, height: 10 }),
+    ...api.getNodeGeometry(
+      liveNode({ width: 20, height: 10, absoluteTransform: matrix }),
+      parent,
+    ),
+    parent,
+    canBeFlattened: true,
+    layoutSizingHorizontal: fill ? "FILL" : "FIXED",
+    layoutSizingVertical: fill ? "FILL" : "FIXED",
+    layoutPositioning: absolute ? "ABSOLUTE" : "AUTO",
+  };
+  const bounds = api.getTransformedBounds(20, 10, matrix);
+  icon.svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20" viewBox="0 0 10 20"><path d="M0 0H10V20H0Z"/></svg>';
+  icon.svgGeometry = api.getSVGGeometry(icon.svg, bounds, matrix);
+  parent.children = [icon];
+  return {
+    api,
+    icon,
+    parent,
+    html: (await api.htmlMain([parent], { ...settings, embedVectors: true }))
+      .html,
+  };
+}
+
+test("quarter-turn Flex icons occupy rotated bounds and compensate their intrinsic origin", async () => {
+  for (const mode of ["HORIZONTAL", "VERTICAL"]) {
+    const { html, icon } = await rotatedIconLayout({ mode });
+    const outer = html.match(/data-layer="Icon"[^>]*style="([^"]*)"/)[1];
+    assert.match(outer, /width: 10px; height: 20px/);
+    assert.match(outer, /flex-shrink: 0/);
+    assert.doesNotMatch(outer, /transform:|left:|top:/);
+    assert.match(
+      html,
+      /data-svg-transform style="position: absolute; left: 0px; top: 20px; width: 20px; height: 10px; transform: matrix\(0, -1, 1, 0, 0, 0\)/,
+    );
+    assert.equal(icon.width, 20);
+    assert.equal(icon.height, 10);
+  }
+});
+
+test("absolute and non-auto-layout icons retain left/top plus matrix without compensation", async () => {
+  for (const options of [{ absolute: true }, { mode: "NONE" }]) {
+    const { html } = await rotatedIconLayout(options);
+    const outer = html.match(/data-layer="Icon"[^>]*style="([^"]*)"/)[1];
+    assert.match(outer, /width: 20px; height: 10px/);
+    assert.match(outer, /left: 10px; top: 20px; position: absolute/);
+    assert.match(outer, /matrix\(0, -1, 1, 0, 0, 0\)/);
+    assert.doesNotMatch(html, /data-svg-transform/);
+  }
+});
+
+test("affine Flex icon compensation handles fractional rotation and mirroring while preserving FILL", async () => {
+  const fractional = await rotatedIconLayout({ angle: 30 });
+  assert.match(
+    fractional.html,
+    /data-layer="Icon"[^>]*width: 22.32px; height: 18.66px/,
+  );
+  assert.match(
+    fractional.html,
+    /data-svg-transform style="position: absolute; left: 5px; top: 0px/,
+  );
+  const mirrored = await rotatedIconLayout({ mirror: true });
+  assert.match(
+    mirrored.html,
+    /data-svg-transform style="position: absolute; left: 20px; top: 0px/,
+  );
+  for (const mode of ["HORIZONTAL", "VERTICAL"]) {
+    const { html } = await rotatedIconLayout({ fill: true, mode });
+    const outer = html.match(/data-layer="Icon"[^>]*style="([^"]*)"/)[1];
+    assert.match(outer, /flex: 1 1 0/);
+    assert.doesNotMatch(outer, /flex-shrink: 0|transform:/);
+  }
+  const unrotated = await rotatedIconLayout({ angle: 0 });
+  assert.doesNotMatch(unrotated.html, /data-svg-transform/);
 });
