@@ -17,7 +17,14 @@ export interface ConversionData {
   htmlPreview: HTMLPreview;
   colors: SolidColorConversion[];
   gradients: LinearGradientConversion[];
+  svgAssets: SVGAsset[];
   warnings: Warning[];
+}
+
+export interface SVGAsset {
+  id: string;
+  name: string;
+  svg: string;
 }
 
 export type Warning = string;

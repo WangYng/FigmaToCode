@@ -7,6 +7,7 @@ import {
   HTMLPreview,
   LinearGradientConversion,
   SolidColorConversion,
+  SVGAsset,
   ErrorMessage,
   SettingsChangedMessage,
   Warning,
@@ -22,6 +23,7 @@ interface AppState {
   settings: PluginSettings | null;
   colors: SolidColorConversion[];
   gradients: LinearGradientConversion[];
+  svgAssets: SVGAsset[];
   warnings: Warning[];
 }
 
@@ -62,6 +64,7 @@ export default function App() {
     settings: null,
     colors: [],
     gradients: [],
+    svgAssets: [],
     warnings: [],
   });
 
@@ -102,6 +105,7 @@ export default function App() {
             ...prevState,
             code: "",
             isLoading: true,
+            svgAssets: [],
             hasSelection: true,
           }));
           break;
@@ -255,6 +259,7 @@ export default function App() {
             warnings: [],
             colors: [],
             gradients: [],
+            svgAssets: [],
             isLoading: false,
             hasSelection: false,
           }));
@@ -267,6 +272,7 @@ export default function App() {
             ...prevState,
             colors: [],
             gradients: [],
+            svgAssets: [],
             code: `Error :(\n// ${errorMessage.error}`,
             isLoading: false,
           }));
@@ -343,6 +349,7 @@ export default function App() {
         settings={state.settings}
         colors={state.colors}
         gradients={state.gradients}
+        svgAssets={state.svgAssets}
         onDownloadNode={
           state.hasSelection
             ? () => {

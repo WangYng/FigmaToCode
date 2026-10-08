@@ -16,6 +16,7 @@ import {
 import { PluginSettings } from "types";
 import { convertToCode } from "./common/retrieveUI/convertToCode";
 import { generateHTMLPreview } from "./html/htmlMain";
+import { retrieveSVGAssets } from "./common/retrieveUI/retrieveSVGAssets";
 import {
   getNodeByIdAsyncCalls,
   getNodeByIdAsyncTime,
@@ -56,6 +57,7 @@ export const run = async (settings: PluginSettings) => {
         htmlPreview: { size: { width: 0, height: 0 }, content: "" },
         colors: [],
         gradients: [],
+        svgAssets: [],
         settings,
         warnings: [...warnings],
       });
@@ -116,6 +118,7 @@ export const run = async (settings: PluginSettings) => {
     htmlPreview: previewChunked ? { ...htmlPreview, content: "" } : htmlPreview,
     colors,
     gradients,
+    svgAssets: retrieveSVGAssets(convertedSelection),
     settings,
     warnings: [...warnings],
     previewChunked,

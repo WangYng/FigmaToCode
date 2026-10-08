@@ -2,6 +2,7 @@ import copy from "copy-to-clipboard";
 import Preview from "./components/Preview";
 import GradientsPanel from "./components/GradientsPanel";
 import ColorsPanel from "./components/ColorsPanel";
+import SVGAssetsPanel from "./components/SVGAssetsPanel";
 import CodePanel from "./components/CodePanel";
 import WarningsPanel from "./components/WarningsPanel";
 import {
@@ -9,6 +10,7 @@ import {
   LinearGradientConversion,
   PluginSettings,
   SolidColorConversion,
+  SVGAsset,
   Warning,
 } from "types";
 import {
@@ -30,6 +32,7 @@ type PluginUIProps = {
   ) => void;
   colors: SolidColorConversion[];
   gradients: LinearGradientConversion[];
+  svgAssets: SVGAsset[];
   isLoading: boolean;
   onDownloadNode?: () => void;
 };
@@ -89,6 +92,10 @@ export const PluginUI = (props: PluginUIProps) => {
                 copy(value);
               }}
             />
+          )}
+
+          {props.svgAssets.length > 0 && (
+            <SVGAssetsPanel assets={props.svgAssets} />
           )}
 
           {props.gradients.length > 0 && (
