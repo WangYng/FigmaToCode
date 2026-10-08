@@ -248,6 +248,77 @@ test("fixed-width auto-height text still wraps inside a NO_WRAP container", asyn
   }
 });
 
+test("nested FILL buttons use their allocated width without a content-based minimum", async () => {
+  const api = runtime();
+  const button = liveNode({
+    name: "Button",
+    type: "FRAME",
+    width: 80,
+    layoutMode: "HORIZONTAL",
+    layoutSizingHorizontal: "FILL",
+    children: [
+      textNode([segment("确认并继续")], {
+        textAutoResize: "WIDTH_AND_HEIGHT",
+        layoutSizingHorizontal: "HUG",
+        layoutSizingVertical: "HUG",
+      }),
+    ],
+  });
+  const row = liveNode({
+    type: "FRAME",
+    width: 200,
+    layoutMode: "HORIZONTAL",
+    children: [liveNode({ width: 120 }), button],
+  });
+  const nodes = await api.nodesToJSON([row], settings);
+  for (const output of [
+    (await api.htmlMain(nodes, settings)).html,
+    (await api.generateHTMLPreview(nodes, settings)).content,
+  ]) {
+    const style = output.match(/data-layer="Button"[^>]*style="([^"]*)"/)[1];
+    assert.match(style, /flex: 1 1 0/);
+    assert.match(style, /min-width: 0px/);
+    assert.match(output, /white-space: nowrap; flex-shrink: 0/);
+  }
+});
+
+test("FILL minimum-width fallback preserves explicit constraints and does not affect FIXED or HUG", async () => {
+  const api = runtime();
+  for (const [sizing, minWidth] of [
+    ["FILL", 96],
+    ["FILL", 0],
+    ["FIXED", undefined],
+    ["HUG", undefined],
+  ]) {
+    const button = liveNode({
+      name: "Button",
+      type: "FRAME",
+      layoutMode: "HORIZONTAL",
+      layoutSizingHorizontal: sizing,
+      minWidth,
+      children: [textNode([segment("确认")])],
+    });
+    const nodes = await api.nodesToJSON(
+      [
+        liveNode({
+          type: "FRAME",
+          layoutMode: "HORIZONTAL",
+          children: [button],
+        }),
+      ],
+      settings,
+    );
+    const { html } = await api.htmlMain(nodes, settings);
+    const style = html.match(/data-layer="Button"[^>]*style="([^"]*)"/)[1];
+    if (minWidth !== undefined) {
+      assert.match(style, new RegExp(`min-width: ${minWidth}px`));
+      assert.equal((style.match(/min-width:/g) ?? []).length, 1);
+    } else {
+      assert.doesNotMatch(style, /min-width:/);
+    }
+  }
+});
+
 test("empty layout containers still receive fixed dimensions", async () => {
   const api = runtime();
   const frame = liveNode({

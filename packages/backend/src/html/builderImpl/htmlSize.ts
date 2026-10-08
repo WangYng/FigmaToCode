@@ -67,6 +67,10 @@ export const htmlSizePartial = (
 
   if (node.minWidth !== undefined && node.minWidth !== null) {
     constraints.push(formatCSS("min-width", node.minWidth));
+  } else if (size.width === "fill") {
+    // Flex's automatic minimum follows unwrapped content. FILL must be able
+    // to use the width allocated by the parent instead of widening the layout.
+    constraints.push(formatCSS("min-width", 0));
   }
 
   if (node.maxHeight !== undefined && node.maxHeight !== null) {
