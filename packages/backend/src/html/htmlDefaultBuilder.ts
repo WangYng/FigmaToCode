@@ -9,6 +9,7 @@ import {
 import {
   buildBackgroundValues,
   htmlColorFromFills,
+  getBackgroundPaints,
 } from "./builderImpl/htmlColor";
 import { htmlPadding } from "./builderImpl/htmlPadding";
 import { htmlSizePartial } from "./builderImpl/htmlSize";
@@ -258,7 +259,10 @@ export class HtmlDefaultBuilder {
       return this;
     }
 
-    const backgroundValues = buildBackgroundValues(paintArray as any);
+    const backgroundValues = buildBackgroundValues(
+      paintArray as any,
+      this.node,
+    );
     if (backgroundValues) {
       this.addStyles(formatCSS("background", backgroundValues));
 
@@ -275,9 +279,10 @@ export class HtmlDefaultBuilder {
   }
 
   buildBackgroundBlendModes(paintArray: ReadonlyArray<Paint>): string {
+    const paints = getBackgroundPaints(paintArray as any);
     if (
-      paintArray.length === 0 ||
-      paintArray.every(
+      paints.length === 0 ||
+      paints.every(
         (d) => d.blendMode === "NORMAL" || d.blendMode === "PASS_THROUGH",
       )
     ) {
@@ -285,12 +290,12 @@ export class HtmlDefaultBuilder {
     }
 
     // Reverse the array to match the background order
-    const blendModes = [...paintArray].reverse().map((paint) => {
-      if (paint.blendMode === "PASS_THROUGH") {
-        return "normal";
-      }
-
-      return paint.blendMode?.toLowerCase();
+    const blendModes = [...paints].reverse().flatMap((paint) => {
+      const mode =
+        paint.blendMode === "PASS_THROUGH"
+          ? "normal"
+          : (paint.blendMode?.toLowerCase() ?? "normal");
+      return Array(paint.type === "GRADIENT_DIAMOND" ? 4 : 1).fill(mode);
     });
 
     return blendModes.join(", ");

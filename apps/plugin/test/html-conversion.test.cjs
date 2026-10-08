@@ -16,6 +16,7 @@ const bundle = buildSync({
       `export { retrieveSVGAssets } from ${JSON.stringify(`${backend}/common/retrieveUI/retrieveSVGAssets.ts`)};`,
       `export { htmlShadow } from ${JSON.stringify(`${backend}/html/builderImpl/htmlShadow.ts`)};`,
       `export { needsNativeShadow } from ${JSON.stringify(`${backend}/common/nodeShadow.ts`)};`,
+      `export { buildBackgroundValues, htmlGradientFromFills } from ${JSON.stringify(`${backend}/html/builderImpl/htmlColor.ts`)};`,
     ].join("\n"),
     resolveDir: backend,
     loader: "ts",
@@ -124,6 +125,7 @@ function jsonNode(node) {
       height: Math.max(...ys) - Math.min(...ys),
     },
     layoutMode: node.layoutMode ?? "NONE",
+    clipsContent: node.clipsContent,
     layoutWrap: node.layoutWrap ?? "NO_WRAP",
     layoutSizingHorizontal: node.layoutSizingHorizontal ?? "FIXED",
     layoutSizingVertical: node.layoutSizingVertical ?? "FIXED",
@@ -951,4 +953,249 @@ test("text keeps text-shadow without box or contour shadows", async () => {
   const { html } = await api.htmlMain(nodes, settings);
   assert.match(html, /text-shadow:/);
   assert.doesNotMatch(html, /box-shadow:|drop-shadow\(/);
+});
+
+function linearGradient(properties = {}) {
+  return {
+    type: "GRADIENT_LINEAR",
+    visible: true,
+    opacity: 1,
+    blendMode: "NORMAL",
+    gradientHandlePositions: [
+      { x: 0, y: 0 },
+      { x: 0, y: 3.02747 },
+      { x: 1, y: 0 },
+    ],
+    gradientStops: [
+      { position: 0, color: { r: 1, g: 1, b: 1, a: 0.5 } },
+      { position: 0.273128, color: { r: 0, g: 0, b: 0, a: 1 } },
+    ],
+    ...properties,
+  };
+}
+
+test("hidden gradient and image fills stay invisible without removing the node or its blur", async () => {
+  const api = runtime();
+  for (const fill of [
+    linearGradient({ visible: false }),
+    { type: "IMAGE", visible: false, imageRef: "hidden" },
+  ]) {
+    const nodes = await api.nodesToJSON(
+      [
+        liveNode({
+          name: "Hidden fill",
+          height: 91,
+          fills: [fill],
+          absoluteRenderBounds: null,
+          effects: [{ type: "LAYER_BLUR", visible: true, radius: 2 }],
+        }),
+      ],
+      settings,
+    );
+    for (const html of [
+      (await api.htmlMain(nodes, settings)).html,
+      (await api.generateHTMLPreview(nodes, settings)).content,
+    ]) {
+      assert.match(html, /data-layer="Hidden fill"/);
+      assert.match(html, /filter: blur\(1px\)/);
+      assert.doesNotMatch(
+        html,
+        /background:|linear-gradient|<img|placehold.co/,
+      );
+    }
+    assert.equal(nodes[0].fills[0].visible, false);
+  }
+  assert.equal(
+    api.htmlGradientFromFills(linearGradient({ visible: false })),
+    "",
+  );
+});
+
+test("all gradient types and solid fills share visibility filtering", () => {
+  const api = runtime();
+  for (const type of [
+    "GRADIENT_LINEAR",
+    "GRADIENT_RADIAL",
+    "GRADIENT_ANGULAR",
+    "GRADIENT_DIAMOND",
+  ]) {
+    assert.equal(
+      api.buildBackgroundValues([linearGradient({ type, visible: false })]),
+      "",
+    );
+  }
+  const visible = {
+    type: "SOLID",
+    color: { r: 1, g: 0, b: 0 },
+    blendMode: "NORMAL",
+  };
+  assert.equal(
+    api.buildBackgroundValues([linearGradient({ visible: false }), visible]),
+    "#FF0000",
+  );
+  assert.equal(api.buildBackgroundValues([{ ...visible, visible: false }]), "");
+});
+
+test("background layers and blend modes omit the same hidden paints", async () => {
+  const api = runtime();
+  const fills = [
+    { type: "SOLID", color: { r: 1, g: 0, b: 0 }, blendMode: "MULTIPLY" },
+    linearGradient({ visible: false, blendMode: "SCREEN" }),
+    { type: "SOLID", color: { r: 0, g: 0, b: 1 }, blendMode: "NORMAL" },
+    linearGradient({ blendMode: "OVERLAY" }),
+  ];
+  const nodes = await api.nodesToJSON([liveNode({ fills })], settings);
+  const { html } = await api.htmlMain(nodes, settings);
+  assert.equal((html.match(/linear-gradient\(/g) ?? []).length, 3);
+  assert.match(html, /background-blend-mode: overlay, normal, multiply/);
+  assert.doesNotMatch(html, /screen/);
+});
+
+test("linear gradients retain the Figma axis offset, length and fractional stops", async () => {
+  const api = runtime();
+  const nodes = await api.nodesToJSON(
+    [liveNode({ width: 393, height: 91, fills: [linearGradient()] })],
+    settings,
+  );
+  const { html } = await api.htmlMain(nodes, settings);
+  assert.match(html, /linear-gradient\(180deg,/);
+  assert.match(html, /82\.688683%/);
+  assert.doesNotMatch(html, /black 27%/);
+  const shifted = api.htmlGradientFromFills(
+    linearGradient({
+      gradientHandlePositions: [
+        { x: 0, y: -0.2 },
+        { x: 0, y: 0.6 },
+        { x: 1, y: 0 },
+      ],
+      gradientStops: [
+        { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+        { position: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+      ],
+    }),
+    { width: 393, height: 91 },
+  );
+  assert.match(shifted, /#FF0000 -20%/);
+  assert.match(shifted, /#0000FF 60%/);
+});
+
+test("non-square gradient direction and start/end stops use physical node dimensions", () => {
+  const api = runtime();
+  const gradient = linearGradient({
+    gradientHandlePositions: [
+      { x: 0.25, y: 0.5 },
+      { x: 0.75, y: 1 },
+      { x: 0, y: 1 },
+    ],
+    gradientStops: [
+      { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+      { position: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+    ],
+  });
+  const css = api.htmlGradientFromFills(gradient, { width: 200, height: 100 });
+  assert.match(css, /116\.565051deg/);
+  assert.match(css, /#FF0000 30%/);
+  assert.match(css, /#0000FF 80%/);
+  const degenerate = api.htmlGradientFromFills(
+    {
+      ...gradient,
+      gradientHandlePositions: [
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+      ],
+    },
+    { width: 200, height: 100 },
+  );
+  assert.doesNotMatch(degenerate, /NaN|Infinity/);
+});
+
+test("preview includes overflowing children but exported layout keeps its original height", async () => {
+  const api = runtime();
+  const child = liveNode({
+    type: "FRAME",
+    name: "Navigation Bar",
+    width: 393,
+    height: 120,
+    children: [liveNode()],
+  });
+  const parent = liveNode({
+    type: "FRAME",
+    name: "Navigation",
+    width: 393,
+    height: 91,
+    clipsContent: false,
+    children: [child],
+    absoluteRenderBounds: { x: 0, y: 0, width: 393, height: 120 },
+  });
+  const nodes = await api.nodesToJSON([parent], settings);
+  const { html } = await api.htmlMain(nodes, settings);
+  assert.match(html, /^<div data-layer="Navigation"/);
+  assert.match(html, /data-layer="Navigation"[^>]*width: 393px; height: 91px/);
+  const preview = await api.generateHTMLPreview(nodes, settings);
+  assert.equal(preview.size.height, 120);
+  assert.match(
+    preview.content,
+    /^<div style="position: relative; width: 393px; height: 120px"/,
+  );
+  assert.match(
+    preview.content,
+    /data-layer="Navigation"[^>]*width: 393px; height: 91px/,
+  );
+  assert.equal(
+    (await api.htmlMain(nodes, settings)).html,
+    html,
+    "preview must not mutate exported layout",
+  );
+});
+
+test("multiple preview roots fit overflow individually without altering exports", async () => {
+  const api = runtime();
+  const roots = await api.nodesToJSON(
+    [
+      liveNode({
+        name: "First",
+        width: 100,
+        height: 91,
+        absoluteRenderBounds: { x: 0, y: -10, width: 100, height: 130 },
+      }),
+      liveNode({
+        name: "Second",
+        width: 100,
+        height: 50,
+        absoluteRenderBounds: { x: 0, y: 0, width: 100, height: 70 },
+      }),
+    ],
+    settings,
+  );
+  const preview = await api.generateHTMLPreview(roots, settings);
+  assert.equal(preview.size.height, 200);
+  assert.match(preview.content, /width: 100px; height: 130px/);
+  assert.match(preview.content, /width: 100px; height: 70px/);
+  const { html } = await api.htmlMain(roots, settings);
+  assert.doesNotMatch(html, /height: 130px|height: 70px/);
+  assert.match(html, /height: 91px/);
+});
+
+test("hidden fills and null render bounds never remove a container's visible children", async () => {
+  const api = runtime();
+  const nodes = await api.nodesToJSON(
+    [
+      liveNode({
+        type: "FRAME",
+        name: "Container",
+        fills: [linearGradient({ visible: false })],
+        absoluteRenderBounds: null,
+        children: [textNode([segment("可见内容")])],
+      }),
+    ],
+    settings,
+  );
+  for (const html of [
+    (await api.htmlMain(nodes, settings)).html,
+    (await api.generateHTMLPreview(nodes, settings)).content,
+  ]) {
+    assert.match(html, /data-layer="Container"/);
+    assert.ok(html.includes("可见内容"));
+    assert.doesNotMatch(html, /linear-gradient/);
+  }
 });

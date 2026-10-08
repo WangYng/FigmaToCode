@@ -1,22 +1,9 @@
 import { nodeSize } from "../../common/nodeWidthHeight";
 import { formatCSS } from "../../common/formatCSS";
-import { isPreviewGlobal } from "../htmlMain";
 
 export const htmlSizePartial = (
   node: SceneNode,
 ): { width: string; height: string; constraints: string[] } => {
-  if (
-    isPreviewGlobal &&
-    node.parent === undefined &&
-    !("layoutPositioning" in node && node.layoutPositioning === "ABSOLUTE")
-  ) {
-    return {
-      width: formatCSS("width", "100%"),
-      height: formatCSS("height", "100%"),
-      constraints: [],
-    };
-  }
-
   const size = nodeSize(node);
   const nodeParent = node.parent;
 

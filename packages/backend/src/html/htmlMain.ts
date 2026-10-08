@@ -52,7 +52,7 @@ export const generateHTMLPreview = async (
   nodes: SceneNode[],
   settings: PluginSettings,
 ): Promise<HTMLPreview> => {
-  let result = await htmlMain(nodes, settings, nodes.length > 1 ? false : true);
+  let result = await htmlMain(nodes, settings, true);
 
   if (nodes.length > 1) {
     result.html = `<div style="width: 100%; height: 100%">${result.html}</div>`;
@@ -112,16 +112,11 @@ const htmlWidgetGenerator = async (
       ) {
         await renderAndAttachSVG(node);
       }
-      const bounds = !node.parent ? getRootBounds(node) : null;
-      if (
-        bounds &&
-        (htmlRotation(node as AltNode<SceneNode>).length > 0 ||
-          bounds.x !== 0 ||
-          bounds.y !== 0 ||
-          bounds.width !== node.width ||
-          bounds.height !== node.height)
-      ) {
-        // Preserve intrinsic dimensions while fitting all transformed corners.
+      const bounds =
+        isPreviewGlobal && !node.parent ? getRootBounds(node) : null;
+      if (bounds) {
+        // This canvas is preview-only. Exported nodes keep their layout size,
+        // while transforms/effects/overflow may extend beyond that size.
         const content = await convertNode(settings)({
           ...node,
           x: -bounds.x,

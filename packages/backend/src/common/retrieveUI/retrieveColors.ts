@@ -19,6 +19,7 @@ export const retrieveGenericSolidUIColors = async (): Promise<
   // Process all paints in parallel to handle variables
   await Promise.all(
     selectionColors.paints.map(async (d) => {
+      if (d.visible === false) return;
       const paint = { ...d } as Paint;
       await processColorVariables(paint as any);
 
@@ -70,7 +71,7 @@ export const retrieveGenericLinearGradients = async (): Promise<
   // Process all gradient paints
   await Promise.all(
     selectionColors.paints.map(async (paint) => {
-      if (paint.type === "GRADIENT_LINEAR") {
+      if (paint.type === "GRADIENT_LINEAR" && paint.visible !== false) {
         let fill = { ...paint };
         const t = fill.gradientTransform;
         fill.gradientHandlePositions = [

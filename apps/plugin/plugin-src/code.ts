@@ -217,7 +217,7 @@ const codegenMode = async () => {
       );
 
       const html = (
-        await htmlMain(convertedSelection as any, userPluginSettings, true)
+        await htmlMain(convertedSelection as any, userPluginSettings)
       ).html;
 
       return [

@@ -116,7 +116,7 @@ const processGradientStop = (
   };
 
   const color = processColorWithVariable(fillInfo);
-  const position = `${(stop.position * positionMultiplier).toFixed(0)}${unit}`;
+  const position = `${Number((stop.position * positionMultiplier).toFixed(6))}${unit}`;
   return `${color} ${position}`;
 };
 
@@ -139,11 +139,14 @@ const processGradientStops = (
 /**
  * Determine the appropriate gradient function based on fill type
  */
-export const htmlGradientFromFills = (fill: Paint): string => {
-  if (!fill) return "";
+export const htmlGradientFromFills = (
+  fill: Paint,
+  size: { width: number; height: number } = { width: 1, height: 1 },
+): string => {
+  if (!fill || fill.visible === false) return "";
   switch (fill.type) {
     case "GRADIENT_LINEAR":
-      return htmlLinearGradient(fill);
+      return htmlLinearGradient(fill, size);
     case "GRADIENT_ANGULAR":
       return htmlAngularGradient(fill);
     case "GRADIENT_RADIAL":
@@ -158,18 +161,40 @@ export const htmlGradientFromFills = (fill: Paint): string => {
 /**
  * Generate CSS linear gradient
  */
-export const htmlLinearGradient = (fill: GradientPaint) => {
+export const htmlLinearGradient = (
+  fill: GradientPaint,
+  size: { width: number; height: number } = { width: 1, height: 1 },
+) => {
+  if (fill.visible === false || !fill.gradientStops.length) return "";
   const [start, end] = fill.gradientHandlePositions;
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  let angle = Math.atan2(dy, dx) * (180 / Math.PI); // Angle in degrees
-  angle = (angle + 360) % 360; // Normalize to 0-360
-  const cssAngle = (angle + 90) % 360; // Adjust for CSS convention
-  const mappedFill = processGradientStops(
-    fill.gradientStops,
-    fill.opacity ?? 1,
-  );
-  return `linear-gradient(${cssAngle.toFixed(0)}deg, ${mappedFill})`;
+  const width = size.width > 0 ? size.width : 1;
+  const height = size.height > 0 ? size.height : 1;
+  const dx = (end.x - start.x) * width;
+  const dy = (end.y - start.y) * height;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-12) {
+    const stop = fill.gradientStops[fill.gradientStops.length - 1];
+    return `linear-gradient(0deg, ${processGradientStop({ ...stop, position: 0 }, fill.opacity ?? 1)}, ${processGradientStop({ ...stop, position: 1 }, fill.opacity ?? 1)})`;
+  }
+  const ux = dx / length;
+  const uy = dy / length;
+  // CSS centers its gradient line on the box. Project the Figma origin and
+  // gradient length onto that line, retaining stops outside the 0–100% range.
+  const cssLength = Math.abs(width * ux) + Math.abs(height * uy);
+  const offset =
+    (start.x - 0.5) * width * ux +
+    (start.y - 0.5) * height * uy +
+    cssLength / 2;
+  const cssAngle = ((Math.atan2(dy, dx) * 180) / Math.PI + 450) % 360;
+  const mappedFill = fill.gradientStops
+    .map((stop) =>
+      processGradientStop(
+        { ...stop, position: (offset + stop.position * length) / cssLength },
+        fill.opacity ?? 1,
+      ),
+    )
+    .join(", ");
+  return `linear-gradient(${Number(cssAngle.toFixed(6))}deg, ${mappedFill})`;
 };
 
 /**
@@ -240,46 +265,60 @@ export const htmlDiamondGradient = (fill: GradientPaint) => {
  */
 export const buildBackgroundValues = (
   paintArray: ReadonlyArray<Paint> | PluginAPI["mixed"],
+  size?: { width: number; height: number },
 ): string => {
-  if (paintArray === figma.mixed) {
-    return "";
-  }
+  const paints = getBackgroundPaints(paintArray);
 
   // If only one fill, use plain color or gradient
-  if (paintArray.length === 1) {
-    const paint = paintArray[0];
+  if (paints.length === 1) {
+    const paint = paints[0];
     if (paint.type === "SOLID") {
-      return htmlColorFromFills(paintArray);
+      return htmlColorFromFills(paints);
     } else if (
       paint.type === "GRADIENT_LINEAR" ||
       paint.type === "GRADIENT_RADIAL" ||
       paint.type === "GRADIENT_ANGULAR" ||
       paint.type === "GRADIENT_DIAMOND"
     ) {
-      return htmlGradientFromFills(paint);
+      return htmlGradientFromFills(paint, size);
     }
     return "";
   }
 
   // For multiple fills, reverse to match CSS layering (first is top-most)
-  const styles = [...paintArray].reverse().map((paint, index) => {
+  const styles = [...paints].reverse().map((paint) => {
     if (paint.type === "SOLID") {
       // Convert solid colors to gradients for proper layering
       const color = htmlColorFromFills([paint]);
-      if (index === 0) {
-        return `linear-gradient(0deg, ${color} 0%, ${color} 100%)`;
-      }
-      return color;
+      return `linear-gradient(0deg, ${color} 0%, ${color} 100%)`;
     } else if (
       paint.type === "GRADIENT_LINEAR" ||
       paint.type === "GRADIENT_RADIAL" ||
       paint.type === "GRADIENT_ANGULAR" ||
       paint.type === "GRADIENT_DIAMOND"
     ) {
-      return htmlGradientFromFills(paint);
+      return htmlGradientFromFills(paint, size);
     }
     return ""; // Handle other paint types safely
   });
 
   return styles.filter((value) => value !== "").join(", ");
 };
+
+/** The same visible, supported layers drive background and blend-mode order. */
+export const getBackgroundPaints = (
+  paints: ReadonlyArray<Paint> | PluginAPI["mixed"],
+): Paint[] =>
+  Array.isArray(paints)
+    ? paints.filter(
+        (paint) =>
+          paint.visible !== false &&
+          (paint.type === "SOLID" ||
+            [
+              "GRADIENT_LINEAR",
+              "GRADIENT_RADIAL",
+              "GRADIENT_ANGULAR",
+              "GRADIENT_DIAMOND",
+            ].includes(paint.type)),
+      )
+    : [];

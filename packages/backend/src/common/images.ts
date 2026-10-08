@@ -55,7 +55,8 @@ export const getPlaceholderImage = (w: number, h = -1) => {
   return `${PLACEHOLDER_IMAGE_DOMAIN}/${_w}x${_h}`;
 };
 
-const fillIsImage = ({ type }: Paint) => type === "IMAGE";
+const fillIsImage = ({ type, visible }: Paint) =>
+  type === "IMAGE" && visible !== false;
 
 export const getImageFills = (node: MinimalFillsMixin): ImagePaint[] => {
   try {
@@ -101,13 +102,13 @@ export const exportNodeAsBase64PNG = async <T extends ExportableNode>(
 
   if (temporarilyHideChildren) {
     // Store the original visible state of children
-    parent.children.map((child: SceneNode) =>
+    (parent.children.map((child: SceneNode) =>
       originalVisibility.set(child, child.visible),
     ),
       // Temporarily hide all children
       parent.children.forEach((child) => {
         child.visible = false;
-      });
+      }));
   }
 
   // export the image as bytes
