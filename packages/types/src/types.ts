@@ -58,6 +58,7 @@ export type ErrorMessage = Message & {
 // Nodes
 export type AltNodeMetadata = {
   canBeFlattened: boolean;
+  originalType?: SceneNode["type"];
   localTransform?: Transform;
   svgGeometry?: SVGGeometry;
   svg?: string;

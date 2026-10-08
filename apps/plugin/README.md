@@ -37,6 +37,13 @@ they are not substituted for the SVG export origin. SVG Assets retains the origi
 export string. Browser tests with synthetic SVG exports cover transform composition;
 actual Figma exports with strokes, shadows, and clipping still require visual checks.
 
+Transparent artwork uses a contour drop shadow for simple outer shadows; ordinary
+boxes retain box shadows and text retains text shadows. Layer blur never creates
+a shadow. With vector embedding enabled, complex artwork shadows (inner shadows,
+spread, multiple shadows, non-normal blend modes, or incompatible translucent
+shadow behavior) use native SVG export even above the icon size limit. Text
+layouts remain HTML. If native export is unavailable, unsupported shadow effects
+are omitted with a warning rather than replaced by a rectangular shadow.
 
 ## Notes
 

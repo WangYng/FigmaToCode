@@ -13,4 +13,5 @@ export type AltNode = Node & {
   y: number;
   absoluteTransform: Transform;
   localTransform: Transform;
+  originalType: SceneNode["type"];
 };

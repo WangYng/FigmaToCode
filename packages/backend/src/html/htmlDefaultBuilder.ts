@@ -1,5 +1,5 @@
 import { formatCSS } from "../common/formatCSS";
-import { htmlShadow } from "./builderImpl/htmlShadow";
+import { htmlShadowStyles } from "./builderImpl/htmlShadow";
 import {
   htmlVisibility,
   htmlRotation,
@@ -33,6 +33,7 @@ export class HtmlDefaultBuilder {
   data: Array<string>;
   node: SceneNode;
   settings: HTMLSettings;
+  filters: string[] = [];
 
   get name() {
     return this.settings.showLayerNames ? this.node.name : "";
@@ -298,10 +299,10 @@ export class HtmlDefaultBuilder {
   shadow(): this {
     const { node } = this;
     if ("effects" in node) {
-      const shadow = htmlShadow(node);
-      if (shadow) {
-        this.addStyles(formatCSS("box-shadow", htmlShadow(node)));
-      }
+      const shadow = htmlShadowStyles(node);
+      if (shadow.boxShadow)
+        this.addStyles(formatCSS("box-shadow", shadow.boxShadow));
+      if (shadow.filter) this.filters.push(shadow.filter);
     }
     return this;
   }
@@ -348,19 +349,15 @@ export class HtmlDefaultBuilder {
     const { node } = this;
     if ("effects" in node && node.effects.length > 0) {
       const blur = node.effects.find(
-        (e) => e.type === "LAYER_BLUR" && e.visible,
+        (e): e is BlurEffect => e.type === "LAYER_BLUR" && e.visible !== false,
       );
       if (blur) {
-        this.addStyles(
-          formatCSS(
-            "filter",
-            `blur(${numberToFixedString(blur.radius / 2)}px)`,
-          ),
-        );
+        this.filters.push(`blur(${numberToFixedString(blur.radius / 2)}px)`);
       }
 
       const backgroundBlur = node.effects.find(
-        (e) => e.type === "BACKGROUND_BLUR" && e.visible,
+        (e): e is BlurEffect =>
+          e.type === "BACKGROUND_BLUR" && e.visible !== false,
       );
       if (backgroundBlur) {
         this.addStyles(
@@ -381,6 +378,8 @@ export class HtmlDefaultBuilder {
 
   build(additionalStyle: Array<string> = []): string {
     this.addStyles(...additionalStyle);
+    if (this.filters.length)
+      this.addStyles(formatCSS("filter", this.filters.join(" ")));
     const classNames: string[] = [];
     if (this.name) {
       this.addData("layer", this.name.trim());

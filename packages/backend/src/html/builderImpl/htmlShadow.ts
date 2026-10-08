@@ -1,50 +1,39 @@
 import { htmlColor } from "./htmlColor";
+import {
+  needsNativeShadow,
+  shadowEffects,
+  ShadowNode,
+  usesContourShadow,
+} from "../../common/nodeShadow";
+import { addWarning } from "../../common/commonConversionWarnings";
 
-/**
- * https://tailwindcss.com/docs/box-shadow/
- * example: shadow
- */
-export const htmlShadow = (node: BlendMixin): string => {
-  // [when testing] node.effects can be undefined
-  if (node.effects && node.effects.length > 0) {
-    const shadowEffects = node.effects.filter(
-      (d) =>
-        (d.type === "DROP_SHADOW" ||
-          d.type === "INNER_SHADOW" ||
-          d.type === "LAYER_BLUR") &&
-        d.visible,
+export const htmlShadow = (node: ShadowNode): string =>
+  shadowEffects(node)
+    .map((shadow) => {
+      const spread = shadow.spread ? `${shadow.spread}px ` : "";
+      const inner = shadow.type === "INNER_SHADOW" ? " inset" : "";
+      return `${shadow.offset.x}px ${shadow.offset.y}px ${shadow.radius}px ${spread}${htmlColor(shadow.color, shadow.color.a)}${inner}`;
+    })
+    .join(", ");
+
+export function htmlShadowStyles(node: ShadowNode): {
+  boxShadow: string;
+  filter: string;
+} {
+  if (needsNativeShadow(node)) {
+    addWarning(
+      `Shadow on ${node.name ?? node.type} requires SVG export to preserve inner/spread, blend, or translucent shadow behavior.`,
     );
-    // simple shadow from tailwind
-    if (shadowEffects.length > 0) {
-      const shadows: string[] = [];
-
-      shadowEffects.forEach((shadow) => {
-        let x = 0;
-        let y = 0;
-        let blur = 0;
-        let spread = "";
-        let inner = "";
-        let color = "";
-
-        if (shadow.type === "DROP_SHADOW" || shadow.type === "INNER_SHADOW") {
-          x = shadow.offset.x;
-          y = shadow.offset.y;
-          blur = shadow.radius;
-          spread = shadow.spread ? `${shadow.spread}px ` : "";
-          inner = shadow.type === "INNER_SHADOW" ? " inset" : "";
-          color = htmlColor(shadow.color, shadow.color.a);
-        } else if (shadow.type === "LAYER_BLUR") {
-          x = shadow.radius;
-          y = shadow.radius;
-          blur = shadow.radius;
-        }
-
-        shadows.push(`${x}px ${y}px ${blur}px ${spread}${color}${inner}`);
-      });
-
-      // Return box-shadow in the desired format
-      return shadows.join(", ");
-    }
+    return { boxShadow: "", filter: "" };
   }
-  return "";
-};
+  if (!usesContourShadow(node))
+    return { boxShadow: htmlShadow(node), filter: "" };
+  const shadow = shadowEffects(node)[0];
+  if (!shadow || shadow.type !== "DROP_SHADOW")
+    return { boxShadow: "", filter: "" };
+  // CSS drop-shadow takes Gaussian sigma; box-shadow/Figma use a blur radius.
+  return {
+    boxShadow: "",
+    filter: `drop-shadow(${shadow.offset.x}px ${shadow.offset.y}px ${shadow.radius / 2}px ${htmlColor(shadow.color, shadow.color.a)})`,
+  };
+}

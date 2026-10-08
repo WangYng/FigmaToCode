@@ -8,6 +8,7 @@ import { HasGeometryTrait, Node, Paint } from "../api_types";
 import { getNodeGeometry } from "../common/nodeGeometry";
 import { isLikelyIcon } from "./iconDetection";
 import { AltNode } from "../alt_api_types";
+import { isVectorArtwork, needsNativeShadow } from "../common/nodeShadow";
 
 const hasSvgExportSettings = (node: any): boolean => {
   const settingsToCheck: ReadonlyArray<any> = node?.exportSettings || [];
@@ -405,6 +406,7 @@ const processNodePair = async (
 
   if (!jsonNode.id) return null;
   if (jsonNode.visible === false) return null;
+  jsonNode.originalType = figmaNode.type;
 
   // Handle node type-specific conversions.
   const nodeType = jsonNode.type;
@@ -567,6 +569,19 @@ const processNodePair = async (
     } else {
       (jsonNode as any).canBeFlattened = false;
     }
+  }
+
+  // Preserve complex artwork effects using Figma's native renderer, even when
+  // the artwork exceeds the icon-size heuristic. Never flatten text layouts.
+  if (
+    settings.embedVectors &&
+    !parentNode?.canBeFlattened &&
+    isVectorArtwork(jsonNode as any) &&
+    needsNativeShadow(jsonNode as any)
+  ) {
+    jsonNode.canBeFlattened = true;
+    if (settings.useColorVariables)
+      (jsonNode as any)._collectColorMappings = true;
   }
 
   if (

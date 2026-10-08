@@ -14,6 +14,8 @@ const bundle = buildSync({
       `export { relativeToParent, getTransformedBounds, cssMatrix } from ${JSON.stringify(`${backend}/common/nodeGeometry.ts`)};`,
       `export { getSVGGeometry, svgForHTML } from ${JSON.stringify(`${backend}/common/svgGeometry.ts`)};`,
       `export { retrieveSVGAssets } from ${JSON.stringify(`${backend}/common/retrieveUI/retrieveSVGAssets.ts`)};`,
+      `export { htmlShadow } from ${JSON.stringify(`${backend}/html/builderImpl/htmlShadow.ts`)};`,
+      `export { needsNativeShadow } from ${JSON.stringify(`${backend}/common/nodeShadow.ts`)};`,
     ].join("\n"),
     resolveDir: backend,
     loader: "ts",
@@ -779,4 +781,174 @@ test("failed SVG exports fall back to HTML without losing the node transform", a
   assert.match(html, /matrix\(-1, 0, 0, 1, 0, 0\)/);
   assert.doesNotMatch(html, /data-svg-wrapper/);
   assert.equal(api.retrieveSVGAssets(nodes).length, 0);
+});
+
+function dropShadow(properties = {}) {
+  return {
+    type: "DROP_SHADOW",
+    visible: true,
+    blendMode: "NORMAL",
+    offset: { x: 0, y: 2.4557 },
+    radius: 2.4557,
+    color: { r: 0, g: 0, b: 0, a: 0.25 },
+    ...properties,
+  };
+}
+
+function artwork(effects, properties = {}) {
+  return liveNode({
+    type: "GROUP",
+    name: "Artwork",
+    width: 120,
+    height: 100,
+    effects,
+    children: [liveNode({ type: "VECTOR", width: 30, height: 30 })],
+    ...properties,
+  });
+}
+
+test("layer blur never produces a box-shadow", async () => {
+  const api = runtime();
+  const blur = { type: "LAYER_BLUR", radius: 8, visible: true };
+  assert.equal(api.htmlShadow({ effects: [blur] }), "");
+  assert.equal(
+    api.htmlShadow({ effects: [{ ...dropShadow(), visible: false }] }),
+    "",
+  );
+  const nodes = await api.nodesToJSON(
+    [liveNode({ effects: [blur] })],
+    settings,
+  );
+  const { html } = await api.htmlMain(nodes, settings);
+  assert.match(html, /filter: blur\(4px\)/);
+  assert.doesNotMatch(html, /box-shadow|drop-shadow|8px 8px 8px/);
+});
+
+test("converted transparent groups use contour shadows and keep blur in the same filter", async () => {
+  const api = runtime();
+  const nodes = await api.nodesToJSON(
+    [artwork([dropShadow(), { type: "LAYER_BLUR", radius: 8, visible: true }])],
+    settings,
+  );
+  assert.equal(nodes[0].type, "FRAME");
+  assert.equal(nodes[0].originalType, "GROUP");
+  for (const output of [
+    (await api.htmlMain(nodes, settings)).html,
+    (await api.generateHTMLPreview(nodes, settings)).content,
+  ]) {
+    const style = output.match(/data-layer="Artwork"[^>]*style="([^"]*)"/)[1];
+    assert.match(
+      style,
+      /filter: drop-shadow\(0px 2.4557px 1.22785px rgba\(0, 0, 0, 0.25\)\) blur\(4px\)/,
+    );
+    assert.equal((style.match(/filter:/g) ?? []).length, 1);
+    assert.doesNotMatch(style, /box-shadow/);
+  }
+});
+
+test("transparent vector frames use contour shadows but filled cards retain box shadows", async () => {
+  const api = runtime();
+  for (const filled of [false, true]) {
+    const node = artwork([dropShadow()], {
+      type: "FRAME",
+      fills: filled
+        ? [{ type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: 1 }]
+        : [],
+    });
+    const nodes = await api.nodesToJSON([node], settings);
+    const { html } = await api.htmlMain(nodes, settings);
+    if (filled) {
+      assert.match(html, /box-shadow:/);
+      assert.doesNotMatch(html, /drop-shadow\(/);
+    } else {
+      assert.match(html, /drop-shadow\(/);
+      assert.doesNotMatch(html, /box-shadow:/);
+    }
+  }
+  const nodes = await api.nodesToJSON(
+    [liveNode({ effects: [dropShadow({ type: "INNER_SHADOW", spread: 2 })] })],
+    settings,
+  );
+  const { html } = await api.htmlMain(nodes, settings);
+  assert.match(html, /box-shadow:.*2px rgba\(0, 0, 0, 0.25\) inset/);
+});
+
+test("complex artwork shadows use one native SVG without adding a CSS shadow", async () => {
+  for (const effects of [
+    [dropShadow({ spread: 2 })],
+    [dropShadow({ type: "INNER_SHADOW" })],
+    [dropShadow({ blendMode: "MULTIPLY" })],
+    [dropShadow(), dropShadow({ offset: { x: 2, y: 0 } })],
+  ]) {
+    let exports = 0;
+    const svg =
+      '<svg width="120" height="100" viewBox="0 0 120 100"><defs><filter id="native"><feDropShadow dx="0" dy="2.4557" stdDeviation="1.22785" flood-opacity="0.25"/></filter></defs><circle cx="40" cy="40" r="20" filter="url(#native)"/></svg>';
+    const api = runtime({
+      getNodeByIdAsync: async () => ({
+        exportAsync: async () => {
+          exports++;
+          return svg;
+        },
+      }),
+    });
+    const options = {
+      ...settings,
+      embedVectors: true,
+      embedVectorsMaxSize: 64,
+    };
+    const nodes = await api.nodesToJSON([artwork(effects)], options);
+    assert.equal(
+      nodes[0].canBeFlattened,
+      true,
+      "complex effects override only artwork size heuristics",
+    );
+    const { html } = await api.htmlMain(nodes, options);
+    assert.equal(exports, 1);
+    assert.match(html, /feDropShadow/);
+    assert.doesNotMatch(html, /box-shadow:|filter: drop-shadow\(/);
+    assert.equal(api.retrieveSVGAssets(nodes)[0].svg, svg);
+  }
+});
+
+test("showShadowBehindNode is preserved for translucent artwork", async () => {
+  const api = runtime();
+  for (const behind of [undefined, false, true]) {
+    const node = artwork([dropShadow({ showShadowBehindNode: behind })]);
+    node.children[0].fills = [
+      { type: "SOLID", color: { r: 1, g: 0, b: 0 }, opacity: 0.5 },
+    ];
+    assert.equal(api.needsNativeShadow(node), behind !== true);
+    const nodes = await api.nodesToJSON([node], {
+      ...settings,
+      embedVectors: true,
+    });
+    assert.equal(nodes[0].canBeFlattened, behind !== true);
+    assert.equal(nodes[0].effects[0].showShadowBehindNode, behind);
+  }
+});
+
+test("complex effects do not flatten text layouts or reintroduce rectangular fallback shadows", async () => {
+  const api = runtime();
+  const node = artwork([dropShadow({ blendMode: "MULTIPLY" })], {
+    children: [textNode([segment("正文")])],
+  });
+  const nodes = await api.nodesToJSON([node], {
+    ...settings,
+    embedVectors: true,
+  });
+  assert.equal(nodes[0].canBeFlattened, false);
+  const { html } = await api.htmlMain(nodes, settings);
+  assert.ok(html.includes("正文"));
+  assert.doesNotMatch(html, /box-shadow:|filter: drop-shadow\(/);
+});
+
+test("text keeps text-shadow without box or contour shadows", async () => {
+  const api = runtime();
+  const nodes = await api.nodesToJSON(
+    [textNode([segment("文字")], { effects: [dropShadow()] })],
+    settings,
+  );
+  const { html } = await api.htmlMain(nodes, settings);
+  assert.match(html, /text-shadow:/);
+  assert.doesNotMatch(html, /box-shadow:|drop-shadow\(/);
 });
