@@ -122,9 +122,8 @@ const htmlWidgetGenerator = async (
           x: -bounds.x,
           y: -bounds.y,
           layoutPositioning: "ABSOLUTE",
-          layoutSizingHorizontal: "FIXED",
-          layoutSizingVertical: "FIXED",
-        } as SceneNode);
+          previewRoot: true,
+        } as SceneNode & { previewRoot: boolean });
         if (!content) return "";
         const style = formatStyleAttribute([
           "position: relative",

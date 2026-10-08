@@ -4,7 +4,11 @@ import { formatCSS } from "../../common/formatCSS";
 export const htmlSizePartial = (
   node: SceneNode,
 ): { width: string; height: string; constraints: string[] } => {
-  const size = nodeSize(node);
+  // Fit the selected root to its measured size without rewriting its Figma
+  // sizing mode: padding and other layout rules still need the original mode.
+  const size = (node as SceneNode & { previewRoot?: boolean }).previewRoot
+    ? { width: node.width, height: node.height }
+    : nodeSize(node);
   const nodeParent = node.parent;
 
   let w = "";

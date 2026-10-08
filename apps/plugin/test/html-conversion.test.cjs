@@ -130,6 +130,13 @@ function jsonNode(node) {
     layoutSizingHorizontal: node.layoutSizingHorizontal ?? "FIXED",
     layoutSizingVertical: node.layoutSizingVertical ?? "FIXED",
     minWidth: node.minWidth,
+    paddingLeft: node.paddingLeft,
+    paddingRight: node.paddingRight,
+    paddingTop: node.paddingTop,
+    paddingBottom: node.paddingBottom,
+    primaryAxisAlignItems: node.primaryAxisAlignItems,
+    counterAxisAlignItems: node.counterAxisAlignItems,
+    layoutPositioning: node.layoutPositioning,
     ...(node.children ? { children: node.children.map(jsonNode) } : {}),
     ...(node.type === "TEXT"
       ? { style: { textAutoResize: node.textAutoResize ?? "NONE" } }
@@ -1197,5 +1204,108 @@ test("hidden fills and null render bounds never remove a container's visible chi
     assert.match(html, /data-layer="Container"/);
     assert.ok(html.includes("可见内容"));
     assert.doesNotMatch(html, /linear-gradient/);
+  }
+});
+
+function paddedButton(properties = {}) {
+  return liveNode({
+    type: "FRAME",
+    name: "Padded button",
+    width: 80,
+    height: 40,
+    layoutMode: "HORIZONTAL",
+    layoutSizingHorizontal: "FIXED",
+    primaryAxisAlignItems: "CENTER",
+    counterAxisAlignItems: "CENTER",
+    paddingLeft: 60,
+    paddingRight: 60,
+    paddingTop: 6,
+    paddingBottom: 8,
+    children: [
+      textNode([segment("确认")], { textAutoResize: "WIDTH_AND_HEIGHT" }),
+    ],
+    ...properties,
+  });
+}
+
+test("fixed centered single-label buttons normalize only oversized horizontal padding", async () => {
+  const api = runtime();
+  for (const layoutMode of ["HORIZONTAL", "VERTICAL"]) {
+    const button = paddedButton({ layoutMode });
+    const nodes = await api.nodesToJSON([button], settings);
+    for (const html of [
+      (await api.htmlMain(nodes, settings)).html,
+      (await api.generateHTMLPreview(nodes, settings)).content,
+    ]) {
+      const style = html.match(
+        /data-layer="Padded button"[^>]*style="([^"]*)"/,
+      )[1];
+      assert.match(style, /width: 80px/);
+      assert.match(style, /padding-left: 0px; padding-right: 0px/);
+      assert.match(style, /padding-top: 6px; padding-bottom: 8px/);
+      assert.match(html, /white-space: nowrap; flex-shrink: 0/);
+    }
+    assert.equal(nodes[0].paddingLeft, 60, "raw node data remains unchanged");
+    assert.equal(button.paddingLeft, 60);
+  }
+});
+
+test("HUG, FILL, asymmetric, non-centered, wrapping and multiple-child layouts keep padding", async () => {
+  const api = runtime();
+  const label = textNode([segment("确认")], {
+    textAutoResize: "WIDTH_AND_HEIGHT",
+  });
+  for (const properties of [
+    { layoutSizingHorizontal: "HUG" },
+    { layoutSizingHorizontal: "FILL" },
+    { paddingRight: 50 },
+    { primaryAxisAlignItems: "MIN" },
+    { layoutMode: "VERTICAL", counterAxisAlignItems: "MIN" },
+    { layoutWrap: "WRAP" },
+    { children: [label, liveNode()] },
+    {
+      children: [
+        textNode([segment("允许换行的正文")], { textAutoResize: "HEIGHT" }),
+      ],
+    },
+    {
+      children: [
+        textNode([segment("绝对定位")], {
+          textAutoResize: "WIDTH_AND_HEIGHT",
+          layoutPositioning: "ABSOLUTE",
+        }),
+      ],
+    },
+    { children: [liveNode()] },
+  ]) {
+    const nodes = await api.nodesToJSON([paddedButton(properties)], settings);
+    for (const html of [
+      (await api.htmlMain(nodes, settings)).html,
+      (await api.generateHTMLPreview(nodes, settings)).content,
+    ]) {
+      const style = html.match(
+        /data-layer="Padded button"[^>]*style="([^"]*)"/,
+      )[1];
+      assert.match(style, /padding-left: 60px/);
+      assert.match(
+        style,
+        new RegExp(`padding-right: ${properties.paddingRight ?? 60}px`),
+      );
+    }
+  }
+});
+
+test("normal padding and padding exactly equal to the fixed width are preserved", async () => {
+  const api = runtime();
+  for (const padding of [12, 40]) {
+    const nodes = await api.nodesToJSON(
+      [paddedButton({ paddingLeft: padding, paddingRight: padding })],
+      settings,
+    );
+    const { html } = await api.htmlMain(nodes, settings);
+    assert.match(
+      html,
+      new RegExp(`padding-left: ${padding}px; padding-right: ${padding}px`),
+    );
   }
 });
